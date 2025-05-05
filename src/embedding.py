@@ -12,13 +12,13 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = model.to(device)
 
 # Read sequences from the FASTA file
-sequences = list(SeqIO.parse("cath-50-samples.fa", "fasta"))
+sequences = list(SeqIO.parse("data/cath-50-samples.fa", "fasta"))
 
 # Dictionary to store embeddings
 all_embeddings = {}
 
 # Process each sequence
-for seq_record in sequences[:2]:
+for seq_record in sequences[:1]:
     sequence = str(seq_record.seq)
     sequence = sequence.replace('U', 'X').replace('Z', 'X').replace('O', 'X')
     ids = tokenizer.batch_encode_plus([sequence], add_special_tokens=True, padding=True, return_tensors="pt")

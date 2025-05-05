@@ -4,3 +4,5 @@ transformers
 biopython
 sentencepiece
 hf_xet
+pandas
+plotly
