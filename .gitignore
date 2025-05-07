@@ -185,3 +185,5 @@ data/cath-domain-list.txt
 data/cath-domain-seqs.fa
 
 data/domains-and-seqs.csv
+/data/orengoftp.biochem.ucl.ac.uk/
+*.DS_Store
