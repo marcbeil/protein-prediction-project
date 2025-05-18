@@ -188,3 +188,5 @@ data/domains-and-seqs.csv
 /data/orengoftp.biochem.ucl.ac.uk/
 *.DS_Store
 .junie/
+
+data/embeddings
