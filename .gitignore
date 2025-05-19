@@ -177,7 +177,7 @@ cython_debug/
 .idea/
 
 ./data/cath-domain-list.txt
-./data/cath-domain-seqs.fa
+./data/cath-domain-seqs.fa.txt
 ./data/domains-and-seqs.csv
 
 data/cath-domain-list.txt
@@ -187,3 +187,6 @@ data/cath-domain-seqs.fa
 data/domains-and-seqs.csv
 /data/orengoftp.biochem.ucl.ac.uk/
 *.DS_Store
+.junie/
+
+data/embeddings
