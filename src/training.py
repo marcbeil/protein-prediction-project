@@ -73,13 +73,13 @@ def evaluate(model, val_dataloader, loss_fn, device):
 def make_prediction(model, test_dataloader, device):
     # Initialize lists or tensors to store outputs and labels
     pred_list = []
+    target_list = []
 
     # Set model to evaluation mode
     model.eval()
 
     # Disable gradient computation
     with torch.no_grad():
-
         # Loop over the batches of test data
         for x_test, y_test in test_dataloader:
             for k, v in x_test.items():
@@ -88,46 +88,61 @@ def make_prediction(model, test_dataloader, device):
 
             # Forward pass: get outputs by passing inputs to the model
             with torch.autocast("cuda"):
-                pred = model(x_test)
+                # Get raw logits from the model
+                logits = model(x_test)
+                # For classification, get the predicted class index
+                pred = torch.argmax(logits, dim=1)
 
             # Append outputs and labels to lists or tensors
-            pred_list.append(pred)
+            pred_list.append(pred.cpu())
+            target_list.append(y_test.cpu())
 
     pred_tensor = torch.cat(pred_list, dim=0)
+    target_tensor = torch.cat(target_list, dim=0)
 
-    return pred_tensor
+    return pred_tensor, target_tensor
 
 
 class CathPredDataset(Dataset):
-    def __init__(self, domainID, proteinID, startDomain, endDomain, y):
-        self.domainID = torch.tensor(domainID, dtype=torch.int64)  # TODO: String instead?
-        self.proteinID = torch.tensor(proteinID, dtype=torch.int64)  # TODO: String instead?
-        self.startDomain = torch.tensor(startDomain, dtype=torch.int64)
-        self.endDomain = torch.tensor(endDomain, dtype=torch.int64)
+    def __init__(self, domain_id, domain_start, domain_end, y, embedding_path="data/embeddings/domain_embeddings"):
+        self.domain_id = list(domain_id)  # Convert to list for easier indexing if needed
+        self.domain_start = torch.tensor(domain_start, dtype=torch.int64)
+        self.domain_end = torch.tensor(domain_end, dtype=torch.int64)
         self.y = torch.tensor(y, dtype=torch.int64)
-        self.embedding_path = "../data/embeddings/domain_embeddings"
+        self.embedding_path = embedding_path
 
     def __len__(self):
         return len(self.y)
 
     def __getitem__(self, index):
-        path_to_embedding = os.path.join(self.embedding_path, f"{self.domainID[index]}.pt")
+        path_to_embedding = os.path.join(self.embedding_path, f"{self.domain_id[index]}.pt")
         embedding = torch.load(path_to_embedding)
         x = {
             "embedding": embedding
         }
         y = self.y[index]
-
         return x, y
 
 
 def multiLevelCATHLoss(class_pred, class_true, weights=[1, 1, 1, 1]):
-    # TODO: currently only class level 
+    # TODO: currently only class level
     loss = torch.nn.CrossEntropyLoss()
     total_loss = 0
     for pred, true, weight in zip(class_pred, class_true, weights):
         total_loss += weight * loss(pred, true)
     return total_loss
+
+
+def create_prediction_df(dataset, predictions, targets):
+    """Creates a Pandas DataFrame from the dataset, predictions, and targets."""
+    df = pd.DataFrame({
+        "domain_id": dataset.domain_id,
+        "start": dataset.domain_start.numpy(),
+        "end": dataset.domain_end.numpy(),
+        "target": dataset.y.numpy(),
+        "prediction": predictions.numpy()
+    })
+    return df
 
 
 def main():
@@ -162,14 +177,14 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print("--------------------------------------------------\nData loading")
-    path = ("../data/datasets")
+    path = ("data/datasets")
     print(path)
-    datapath = os.path.join(path, "subset_with_protein_embedding.csv")
-    print(f"Loading dataset: {datapath}")
+    data_set_path = os.path.join(path, "subset_with_protein_embedding.csv")
+    print(f"Loading dataset: {data_set_path}")
 
-    dataset = pd.read_csv(datapath)
+    dataset = pd.read_csv(data_set_path)
     x_c = dataset[["domain_id", "domain_start", "domain_end"]]
-    y_c = dataset["class"]
+    y_c = dataset[["class"]]
     assert x_c.shape[0] == y_c.shape[0]
     data_size = x_c.shape[0]
     num_train = int(args.split * data_size)
@@ -177,11 +192,11 @@ def main():
 
     # model configs
     model_config = Config()
-    with open(os.path.join(datapath, "config.txt"), "w") as f:
+    with open(os.path.join(path, "config.txt"), "w") as f:
         f.write(model_config.__repr__())
-
+    print(y_c.head())
     # Reformat y to numpy matrix
-    ymat = y_c["C"].to_numpy()  # TODO: only single class
+    ymat = y_c["class"].to_numpy()  # TODO: only single class
 
     # randomly shuffle the data
     indices = np.random.default_rng(seed=42).permutation(data_size)
@@ -201,31 +216,28 @@ def main():
 
     # Create DataLoaders
     train_dataset = CathPredDataset(
-        domainID=x_train["domainID"].values,
-        proteinID=x_train["proteinID"].values,
-        startDomain=x_train["domain_start"].values,
-        endDomain=x_train["domain_end"].values,
+        domain_id=x_train["domain_id"].values,
+        domain_start=x_train["domain_start"].values,
+        domain_end=x_train["domain_end"].values,
         y=y_train
     )
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch, shuffle=True, pin_memory=True, num_workers=14)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch, shuffle=True, pin_memory=True, num_workers=11)
 
     val_dataset = CathPredDataset(
-        domainID=x_val["domainID"].values,
-        proteinID=x_val["proteinID"].values,
-        startDomain=x_val["domain_start"].values,
-        endDomain=x_val["domain_end"].values,
+        domain_id=x_val["domain_id"].values,
+        domain_start=x_val["domain_start"].values,
+        domain_end=x_val["domain_end"].values,
         y=y_val
     )
-    val_dataloader = DataLoader(val_dataset, batch_size=args.batch, pin_memory=True, num_workers=14)
+    val_dataloader = DataLoader(val_dataset, batch_size=args.batch, pin_memory=True, num_workers=11)
 
     test_dataset = CathPredDataset(
-        domainID=x_test["domainID"].values,
-        proteinID=x_test["proteinID"].values,
-        startDomain=x_test["domain_start"].values,
-        endDomain=x_test["domain_end"].values,
+        domain_id=x_test["domain_id"].values,
+        domain_start=x_test["domain_start"].values,
+        domain_end=x_test["domain_end"].values,
         y=y_test
     )
-    test_dataloader = DataLoader(test_dataset, batch_size=args.batch, pin_memory=True, num_workers=14)
+    test_dataloader = DataLoader(test_dataset, batch_size=args.batch, pin_memory=True, num_workers=11)
 
     # Define optimizer with a scheduler
     optimizer = optim.AdamW(model.parameters(), lr=args.learning, weight_decay=args.weight_decay)
@@ -239,6 +251,7 @@ def main():
 
     print("--------------------------------------------------\nTraining")
 
+    output_path = os.path.join(path, "output")
     # Training loop. 1 epoch = 1 Loop over the dataset:
     best_loss = np.inf
     best_epoch = 0
@@ -257,7 +270,7 @@ def main():
             best_loss = val_loss
             best_epoch = epoch
             if args.save:
-                torch.save(model.state_dict(), datapath + args.output + ".pt")
+                torch.save(model.state_dict(), os.path.join(output_path, "best_model.pt"))
 
         # early stopping if loss does not imporve for a patience of 10 epochs
         if (epoch - best_epoch) == 10:
@@ -265,17 +278,19 @@ def main():
             break
 
     # load best model
-    model.load_state_dict(torch.load(datapath + args.output + ".pt"))
+    model.load_state_dict(torch.load(os.path.join(output_path, "best_model.pt")))
 
     # output all the correlations
-    out_tensors = make_prediction(model, test_dataloader, device)
-    testdf = None  # TODO: define test df with out_tensors
-    testdf.to_parquet(datapath + 'model_prediction.parquet')
+    out_tensors_test, target_tensors_test = make_prediction(model, test_dataloader, device)
+    testdf = create_prediction_df(test_dataset, out_tensors_test, target_tensors_test)
+    testdf.to_parquet(os.path.join(output_path, 'model_prediction.parquet'))
+    print(f"Test set predictions saved to: {os.path.join(output_path, 'model_prediction.parquet')}")
 
-    train_unshuffled = DataLoader(train_dataset, batch_size=args.batch, shuffle=False, pin_memory=True, num_workers=14)
-    out_tensors = make_prediction(model, train_unshuffled, device)
-    traindf = None  # TODO: define train df with out_tensors
-    traindf.to_parquet(datapath + 'model_trainingset.parquet')
+    train_unshuffled_dataloader = DataLoader(train_dataset, batch_size=args.batch, shuffle=False, pin_memory=True, num_workers=14)
+    out_tensors_train, target_tensors_train = make_prediction(model, train_unshuffled_dataloader, device)
+    traindf = create_prediction_df(train_dataset, out_tensors_train, target_tensors_train)
+    traindf.to_parquet(os.path.join(output_path, 'model_trainingset.parquet'))
+    print(f"Training set predictions saved to: {os.path.join(output_path, 'model_trainingset.parquet')}")
 
     print("--------------------------------------------------\nFinished!")
 
