@@ -115,7 +115,7 @@ class CathPredDataset(Dataset):
         return len(self.y)
 
     def __getitem__(self, index):
-        path_to_embedding = os.path.join(self.embedding_path, f"{self.domain_id[index]}.pt")
+        path_to_embedding = os.path.join(self.embedding_path, f"{self.domain_id[index]}.npy")
         embedding = torch.load(path_to_embedding)
         x = {
             "embedding": embedding
