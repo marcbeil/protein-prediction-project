@@ -97,25 +97,28 @@ def make_prediction(model, test_dataloader, device):
     return pred_tensor
 
 class CathPredDataset(Dataset):
-    def __init__(self, domainID, proteinID, embedding, startDomain, endDomain, y):
-        self.domainID = torch.tensor(domainID, dtype = torch.int64) #TODO: String instead? 
-        self.proteinID = torch.tensor(proteinID, dtype = torch.int64) #TODO: String instead? 
-        self.embedding = embedding # torch.tensor(embedding, dtype = torch.float64)
-        self.startDomain = torch.tensor(startDomain, dtype = torch.int64)
-        self.endDomain = torch.tensor(endDomain, dtype = torch.int64)
-        self.y = torch.tensor(y, dtype = torch.int64)
-        
+    def __init__(self, domainID, proteinID, startDomain, endDomain, y):
+        self.domainID = torch.tensor(domainID, dtype=torch.int64)  # TODO: String instead?
+        self.proteinID = torch.tensor(proteinID, dtype=torch.int64)  # TODO: String instead?
+        self.startDomain = torch.tensor(startDomain, dtype=torch.int64)
+        self.endDomain = torch.tensor(endDomain, dtype=torch.int64)
+        self.y = torch.tensor(y, dtype=torch.int64)
+        self.embedding_path = "../data/embeddings/domain_embeddings"
+
     def __len__(self):
         return len(self.y)
-    
+
     def __getitem__(self, index):
-        x = {"domainID":self.domainID[index],
-             "proteinID":self.proteinID[index],
-             "embedding":self.embedding[index],
-             "startDomain":self.startDomain[index],
+        path_to_embedding = os.path.join(self.embedding_path, f"{self.domainID[index]}.pt")
+        embedding = torch.load(path_to_embedding)
+        x = {"domainID": self.domainID[index],
+             "proteinID": self.proteinID[index],
+             "embedding": embedding,
+             "startDomain": self.startDomain[index],
              "endDomain": self.endDomain[index]
              }
         y = self.y[index]
+
         return x, y
 
 def multiLevelCATHLoss(class_pred, class_true, weights = [1,1,1,1]):
@@ -203,7 +206,6 @@ def main():
     train_dataset = CathPredDataset(
         domainID=x_train["domainID"].values,
         proteinID=x_train["proteinID"].values,
-        embedding=x_train["embedding"].values,
         startDomain=x_train["startDomain"].values,
         endDomain=x_train["endDomain"].values,
         y=y_train
@@ -213,7 +215,6 @@ def main():
     val_dataset = CathPredDataset(
         domainID=x_val["domainID"].values,
         proteinID=x_val["proteinID"].values,
-        embedding=x_val["embedding"].values,
         startDomain=x_val["startDomain"].values,
         endDomain=x_val["endDomain"].values,
         y=y_val
@@ -223,7 +224,6 @@ def main():
     test_dataset = CathPredDataset(
         domainID=x_test["domainID"].values,
         proteinID=x_test["proteinID"].values,
-        embedding=x_test["embedding"].values,
         startDomain=x_test["startDomain"].values,
         endDomain=x_test["endDomain"].values,
         y=y_test
