@@ -116,14 +116,14 @@ if __name__ == '__main__':
                         help='Input domain sequences list file (default: ../data/cath-domain-seqs.fa.txt')
     parser.add_argument('--output', '-o', default="../data/subset.csv",
                         help='Output subset CSV file (default: ../data/subset.csv)')
-    parser.add_argument('--homology-groups', '-g', type=int, default=100,
-                        help='Number of homology groups to sample (default: 100)')
-    parser.add_argument('--samples-per-group', '-s', type=int, default=10,
-                        help='Number of samples per homology group (default: 10)')
-    parser.add_argument('--min-domains', type=int, default=10,
-                        help='Minimum domains per homology group (default: 10)')
-    parser.add_argument('--max-domains', type=int, default=200,
-                        help='Maximum domains per homology group (default: 200)')
+    parser.add_argument('--homology-groups', '-g', type=int, default=1000,
+                        help='Number of homology groups to sample (default: 1000)')
+    parser.add_argument('--samples-per-group', '-s', type=int, default=20,
+                        help='Number of samples per homology group (default: 20)')
+    parser.add_argument('--min-domains', type=int, default=5,
+                        help='Minimum domains per homology group (default: 5)')
+    parser.add_argument('--max-domains', type=int, default=1000,
+                        help='Maximum domains per homology group (default: 1000)')
 
     args = parser.parse_args()
 
