@@ -1,5 +1,5 @@
+import re
 import pandas as pd
-
 
 def parse_cath(cath_domain_list_path="../data/cath-domain-list.txt", cath_domain_seqs_path="../data/cath-domain-seqs.fa.txt"):
     columns = [
@@ -18,15 +18,18 @@ def parse_cath(cath_domain_list_path="../data/cath-domain-list.txt", cath_domain
 
     domain_ranges_df = parse_fasta_domain_ranges(cath_domain_seqs_path)
 
-    print(f"Parsed domain ranges for {len(cath_domains_df)} domains from {cath_domain_seqs_path}")
+    print(f"Parsed domain ranges for {len(domain_ranges_df)} domains from {cath_domain_seqs_path}")
 
     merged = pd.merge(cath_domains_df, domain_ranges_df, on='domain_id', how='inner')
 
     print(f"Merging resulted in {len(merged)} domains")
 
-    for col in columns[1:]:
-        merged[col] = pd.to_numeric(merged[col], errors='coerce')
+    # Calculate length from domain_start and domain_end instead of using original value
+    merged["length"] = merged["cath_domain_end"] - merged["cath_domain_start"] + 1
 
+    for col in columns[1:]:
+        if col in merged.columns:
+            merged[col] = pd.to_numeric(merged[col], errors='coerce')
 
     return merged
 
@@ -36,7 +39,7 @@ def parse_fasta_domain_ranges(fasta_file):
         for line in f:
             if line.startswith(">"):
                 line = line.strip()
-                domain_part = line.split("|")[-1]  # e.g. 101mA00/0-153
+                domain_part = line.split("|")[-1]  # e.g. 101mA00/0-153 or 101mA00/-5-153
                 domain_id = domain_part.split("/")[0]
 
                 # Default start/end to None
@@ -44,25 +47,25 @@ def parse_fasta_domain_ranges(fasta_file):
 
                 if "/" in domain_part:
                     range_part = domain_part.split("/")[1]
-                    range_split = range_part.split("-")
-                    if len(range_split) == 2:
+                    match = re.match(r"(-?\d+)-(-?\d+)", range_part)
+                    if match:
                         try:
-                            start = int(range_split[0])
-                            end = int(range_split[1])
+                            start = int(match.group(1))
+                            end = int(match.group(2))
                         except ValueError:
                             pass  # leave as None if not integers
 
                 records.append({
                     "domain_id": domain_id,
-                    "domain_start": start,
-                    "domain_end": end
+                    "cath_domain_start": start,
+                    "cath_domain_end": end
                 })
 
     df = pd.DataFrame(records)
 
     # Convert columns to integer type, keeping NaN for missing values
-    df['domain_start'] = df['domain_start'].astype('Int64')  # nullable integer
-    df['domain_end'] = df['domain_end'].astype('Int64')  # nullable integer
+    df['cath_domain_start'] = df['cath_domain_start'].astype('Int64')  # nullable integer
+    df['cath_domain_end'] = df['cath_domain_end'].astype('Int64')  # nullable integer
 
     return df
 
@@ -98,7 +101,7 @@ def generate_subset(cath_domains_df, homology_groups=100, samples_per_group=10,
     subset = pd.concat(subset_list, ignore_index=True)
 
     # Select only required columns in specified order
-    output_df = subset[['domain_id', 'class', 'architecture', 'topology', 'homology', 'length', 'domain_start', 'domain_end']]
+    output_df = subset[['domain_id', 'class', 'architecture', 'topology', 'homology', 'length', 'cath_domain_start', 'cath_domain_end']]
 
     print(
         f"Generated random subset with {homology_groups} homology groups and {samples_per_group} samples per group. "
@@ -112,8 +115,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Generate CATH protein domain subset')
     parser.add_argument('--input-cath',  default="../data/cath-domain-list.txt",
                         help='Input CATH domain list file (default: ../data/cath-domain-list.txt)')
-    parser.add_argument('--input-seq', default="../data/cath-domain-seqs.fa.txt",
-                        help='Input domain sequences list file (default: ../data/cath-domain-seqs.fa.txt')
+    parser.add_argument('--input-seq', default="../data/cath-domain-seqs.fa",
+                        help='Input domain sequences list file (default: ../data/cath-domain-seqs.fa')
     parser.add_argument('--output', '-o', default="../data/subset.csv",
                         help='Output subset CSV file (default: ../data/subset.csv)')
     parser.add_argument('--homology-groups', '-g', type=int, default=1000,
