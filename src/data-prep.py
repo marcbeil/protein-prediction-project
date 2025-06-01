@@ -33,27 +33,31 @@ def parse_cath(cath_domain_list_path="../data/cath-domain-list.txt", cath_domain
 
     return merged
 
+def clean_coord_part(part):
+    # Remove letters and brackets, keep digits and minus
+    return re.sub(r"[^\d\-]", "", part)
+
 def parse_fasta_domain_ranges(fasta_file):
     records = []
     with open(fasta_file, 'r') as f:
         for line in f:
             if line.startswith(">"):
                 line = line.strip()
-                domain_part = line.split("|")[-1]  # e.g. 101mA00/0-153 or 101mA00/-5-153
+                domain_part = line.split("|")[-1]  # e.g. 101mA00/1(A)-80 or 101mA00/-5-153
                 domain_id = domain_part.split("/")[0]
 
-                # Default start/end to None
+                # Default values
                 start = end = None
 
                 if "/" in domain_part:
                     range_part = domain_part.split("/")[1]
-                    match = re.match(r"(-?\d+)-(-?\d+)", range_part)
-                    if match:
+                    if "-" in range_part:
+                        start_raw, end_raw = range_part.split("-", 1)
                         try:
-                            start = int(match.group(1))
-                            end = int(match.group(2))
+                            start = int(clean_coord_part(start_raw))
+                            end = int(clean_coord_part(end_raw))
                         except ValueError:
-                            pass  # leave as None if not integers
+                            pass # leave as None if not integers
 
                 records.append({
                     "domain_id": domain_id,
