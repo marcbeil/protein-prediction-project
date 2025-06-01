@@ -82,9 +82,9 @@ def main():
     sequences_to_embed_count = len(dataset)
 
     if not args.overwrite:
-        already_embedded = list(map(lambda filename: filename[:-4], os.listdir(output_dir)))
+        already_embedded_set = {filename[:-4] for filename in os.listdir(output_dir)}
         original_len = len(dataset)
-        dataset = dataset[~dataset['domain_id'].isin(already_embedded)]
+        dataset = dataset[~dataset['domain_id'].isin(already_embedded_set)]
         print(
             f"{original_len - len(dataset)} sequences were already embedded. {len(dataset)} sequences will be embedded now.")
         sequences_to_embed_count = len(dataset)
