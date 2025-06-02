@@ -109,7 +109,7 @@ def main():
                 protein_embedding_path = os.path.join(output_dir, f"{domain_id}")
                 np.save(protein_embedding_path, protein_embedding)
 
-    end_time = time.time()  # Record end time
+    end_time = time.time()
     total_time = end_time - start_time
     print(f"\nTotal execution time: {total_time:.2f} seconds")
 
