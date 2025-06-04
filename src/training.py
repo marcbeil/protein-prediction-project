@@ -128,13 +128,13 @@ def calculate_metrics(predictions, true_labels):
 
     metrics = {}
     metrics['accuracy'] = accuracy_score(true_labels, predictions)
-    metrics['f1_macro'] = f1_score(true_labels, predictions, average='macro')
-    metrics['precision_macro'] = precision_score(true_labels, predictions, average='macro')
-    metrics['recall_macro'] = recall_score(true_labels, predictions, average='macro')
+    metrics['f1_macro'] = f1_score(true_labels, predictions, average='macro', zero_division=0)
+    metrics['precision_macro'] = precision_score(true_labels, predictions, average='macro', zero_division=0)
+    metrics['recall_macro'] = recall_score(true_labels, predictions, average='macro', zero_division=0)
 
-    metrics['f1_weighted'] = f1_score(true_labels, predictions, average='weighted')
-    metrics['precision_weighted'] = precision_score(true_labels, predictions, average='weighted')
-    metrics['recall_weighted'] = recall_score(true_labels, predictions, average='weighted')
+    metrics['f1_weighted'] = f1_score(true_labels, predictions, average='weighted', zero_division=0)
+    metrics['precision_weighted'] = precision_score(true_labels, predictions, average='weighted', zero_division=0)
+    metrics['recall_weighted'] = recall_score(true_labels, predictions, average='weighted', zero_division=0)
 
     return metrics
 
