@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import pickle
 
 import pandas as pd
 import torch
@@ -165,7 +166,7 @@ def main():
                                     description='Parameters for Prediction using model')
     run.add_argument('-t', '--target-label-cols', help='Output pytorch model',
                      choices=['class', 'class.architecture', 'class.architecture.topology',
-                              'class.architecture.topology.homology'], default='class.architecture')
+                              'class.architecture.topology.homology'], default='class.architecture.topology.homology')
     run.add_argument('-o', '--output', help='Output pytorch model', default='output')
     run.add_argument('--overwrite', help='Overwrite files in output path', action='store_true', default=False)
     run.add_argument('-i', '--input_folder', help='Input data folder', default="datasets/v1")
@@ -195,6 +196,7 @@ def main():
     val_dataset = CathPredDomainDataset(val_path, label_encoder, args.target_label_cols)
 
     num_classes = len(label_encoder.classes_)
+    print("Number of classes: {}".format(num_classes))
     # initiate the model
     model = CathPred(num_classes=num_classes)
     model.to(device)
@@ -220,10 +222,15 @@ def main():
     os.makedirs(output_path, exist_ok=True)
 
     hyperparameters = vars(args)
-    params_file_path = os.path.join(args.output, 'params.json')
+    params_file_path = os.path.join(output_path, 'params.json')
     with open(params_file_path, 'w') as f:
         json.dump(hyperparameters, f, indent=4)
     tqdm.write(f"Hyperparameters saved to: {params_file_path}")
+
+    label_encoder_file_path = os.path.join(output_path, 'label_encoder.pkl')
+    with open(label_encoder_file_path, "wb") as f:
+        pickle.dump(label_encoder, f)
+    tqdm.write(f"Label encoder saved to: {label_encoder_file_path}")
 
     # Training loop. 1 epoch = 1 Loop over the dataset:
     metrics_columns = [
