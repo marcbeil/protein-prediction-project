@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 
 import pandas as pd
@@ -217,6 +218,13 @@ def main():
 
     output_path = args.output
     os.makedirs(output_path, exist_ok=True)
+
+    hyperparameters = vars(args)
+    params_file_path = os.path.join(args.output, 'params.json')
+    with open(params_file_path, 'w') as f:
+        json.dump(hyperparameters, f, indent=4)
+    tqdm.write(f"Hyperparameters saved to: {params_file_path}")
+
     # Training loop. 1 epoch = 1 Loop over the dataset:
     metrics_columns = [
         "epoch", "train_loss", "val_loss", "train_accuracy", "val_accuracy",
