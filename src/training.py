@@ -2,10 +2,12 @@ import argparse
 import os
 
 import pandas as pd
+import torch
 import torch.optim as optim
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from dataset import CathPredDomainDataset
 from model import CathPred
@@ -65,9 +67,6 @@ def train(model, train_dataloader, optimizer, loss_fn, device):
     return avg_loss, all_preds, all_labels
 
 
-import torch
-
-
 def evaluate(model, val_dataloader, loss_fn, device):
     # Set model to evaluation mode
     model.eval()
@@ -110,51 +109,6 @@ def evaluate(model, val_dataloader, loss_fn, device):
     return avg_loss, all_preds, all_labels
 
 
-def make_prediction(model, test_dataloader, device):
-    # Initialize lists or tensors to store outputs and labels
-    pred_list = []
-    target_list = []
-
-    # Set model to evaluation mode
-    model.eval()
-
-    # Disable gradient computation
-    with torch.no_grad():
-        # Loop over the batches of test data
-        for x_test, y_test in test_dataloader:
-            for k, v in x_test.items():
-                x_test[k] = v.to(device, non_blocking=True)
-            y_test = y_test.to(device, non_blocking=True)
-
-            # Forward pass: get outputs by passing inputs to the model
-            with torch.autocast(device_type=device.type):
-                # Get raw logits from the model
-                logits = model(x_test)
-                # For classification, get the predicted class index
-                pred = torch.argmax(logits, dim=1)
-
-            # Append outputs and labels to lists or tensors
-            pred_list.append(pred.cpu())
-            target_list.append(y_test.cpu())
-
-    pred_tensor = torch.cat(pred_list, dim=0)
-    target_tensor = torch.cat(target_list, dim=0)
-
-    return pred_tensor, target_tensor
-
-
-def create_prediction_df(dataset, predictions, targets):
-    """Creates a Pandas DataFrame from the dataset, predictions, and targets."""
-    df = pd.DataFrame({
-        "domain_id": dataset.domain_id,
-        "start": dataset.domain_start.numpy(),
-        "end": dataset.domain_end.numpy(),
-        "target": dataset.y.numpy(),
-        "prediction": predictions.numpy()
-    })
-    return df
-
-
 def calculate_metrics(predictions, true_labels):
     """
     Calculates various classification metrics.
@@ -172,10 +126,13 @@ def calculate_metrics(predictions, true_labels):
 
     metrics = {}
     metrics['accuracy'] = accuracy_score(true_labels, predictions)
-    # Add other metrics if needed, e.g., for multi-class or binary
-    # metrics['f1_macro'] = f1_score(true_labels, predictions, average='macro')
-    # metrics['precision_macro'] = precision_score(true_labels, predictions, average='macro')
-    # metrics['recall_macro'] = recall_score(true_labels, predictions, average='macro')
+    metrics['f1_macro'] = f1_score(true_labels, predictions, average='macro')
+    metrics['precision_macro'] = precision_score(true_labels, predictions, average='macro')
+    metrics['recall_macro'] = recall_score(true_labels, predictions, average='macro')
+
+    metrics['f1_weighted'] = f1_score(true_labels, predictions, average='weighted')
+    metrics['precision_weighted'] = precision_score(true_labels, predictions, average='weighted')
+    metrics['recall_weighted'] = recall_score(true_labels, predictions, average='weighted')
 
     return metrics
 
@@ -209,10 +166,17 @@ def main():
                      choices=['class', 'class.architecture', 'class.architecture.topology',
                               'class.architecture.topology.homology'], default='class.architecture')
     run.add_argument('-o', '--output', help='Output pytorch model', default='output')
+    run.add_argument('--overwrite', help='Overwrite files in output path', action='store_true', default=False)
     run.add_argument('-i', '--input_folder', help='Input data folder', default="datasets/v1")
 
     args = parser.parse_args()
 
+    if os.path.exists(args.output):
+        if args.overwrite:
+            print("Output folder already exists. Overwriting")
+        else:
+            print("Output folder already exists. Specify a new output folder or add --overwrite flag")
+            return
     if torch.backends.mps.is_available():
         device = torch.device("mps")
         print("Using MPS (Apple Silicon GPU) for training.")
@@ -254,16 +218,19 @@ def main():
     output_path = args.output
     os.makedirs(output_path, exist_ok=True)
     # Training loop. 1 epoch = 1 Loop over the dataset:
-    train_losses = []
-    val_losses = []
-    train_accuracies = []  # New list for train accuracy
-    val_accuracies = []  # New list for val accuracy
-    # Add more lists if you add more metrics (e.g., train_f1s, val_f1s)
+    metrics_columns = [
+        "epoch", "train_loss", "val_loss", "train_accuracy", "val_accuracy",
+        "train_f1_macro", "train_precision_macro", "train_recall_macro",
+        "train_f1_weighted", "train_precision_weighted", "train_recall_weighted",
+        "val_f1_macro", "val_precision_macro", "val_recall_macro",
+        "val_f1_weighted", "val_precision_weighted", "val_recall_weighted"
+    ]
+    metrics_df = pd.DataFrame(columns=metrics_columns)
 
-    best_loss = float('inf')  # Initialize best_loss for saving the best model
-    best_epoch = -1  # Initialize best_epoch
-    for epoch in range(args.epoch):
-        # Call modified train and evaluate functions
+    best_loss = float('inf')
+    best_epoch = -1
+
+    for epoch in tqdm(range(args.epoch), desc="Training Progress"):
         train_loss, train_preds, train_labels = train(model, train_dataloader, optimizer, loss_fn, device)
         val_loss, val_preds, val_labels = evaluate(model, val_dataloader, loss_fn, device)
 
@@ -273,46 +240,57 @@ def main():
         train_metrics = calculate_metrics(train_preds, train_labels)
         val_metrics = calculate_metrics(val_preds, val_labels)
 
-        # Append losses and primary metrics to lists
-        train_losses.append(train_loss)
-        val_losses.append(val_loss)
-        train_accuracies.append(train_metrics['accuracy'])
-        val_accuracies.append(val_metrics['accuracy'])
-        # If you have more metrics, append them here too
+        # Create a dictionary for the current epoch's metrics
+        current_epoch_metrics = {
+            "epoch": epoch + 1,
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "train_accuracy": train_metrics['accuracy'],
+            "val_accuracy": val_metrics['accuracy'],
+            "train_f1_macro": train_metrics['f1_macro'],
+            "train_precision_macro": train_metrics['precision_macro'],
+            "train_recall_macro": train_metrics['recall_macro'],
+            "train_f1_weighted": train_metrics['f1_weighted'],
+            "train_precision_weighted": train_metrics['precision_weighted'],
+            "train_recall_weighted": train_metrics['recall_weighted'],
+            "val_f1_macro": val_metrics['f1_macro'],
+            "val_precision_macro": val_metrics['precision_macro'],
+            "val_recall_macro": val_metrics['recall_macro'],
+            "val_f1_weighted": val_metrics['f1_weighted'],
+            "val_precision_weighted": val_metrics['precision_weighted'],
+            "val_recall_weighted": val_metrics['recall_weighted'],
+        }
 
-        print(f"Epoch {epoch + 1}/{args.epoch}")
-        print(f"Train Loss: {train_loss:.4f}, Train Acc: {train_metrics['accuracy']:.4f}")
-        print(f"Val Loss: {val_loss:.4f}, Val Acc: {val_metrics['accuracy']:.4f}")
-        print()
+        # Append the current epoch's metrics as a new row to the DataFrame
+        metrics_df = pd.concat([metrics_df, pd.DataFrame([current_epoch_metrics])], ignore_index=True)
 
-        # Save best performance (you might want to save based on validation accuracy instead of loss
-        # if accuracy is your primary metric. Let's stick with loss for now as per original code.)
+        # Save the DataFrame to CSV after each epoch
+        metrics_df.to_csv(os.path.join(output_path, 'metrics_df.csv'), index=False)
+
+        # Update tqdm description with current epoch metrics using tqdm.write
+        tqdm.write(f"Epoch {epoch + 1}/{args.epoch}")
+        tqdm.write(f"Train Loss: {train_loss:.4f}, Train Acc: {train_metrics['accuracy']:.4f}, "
+                   f"Train F1 (Weighted): {train_metrics['f1_weighted']:.4f}")
+        tqdm.write(f"Val Loss: {val_loss:.4f}, Val Acc: {val_metrics['accuracy']:.4f}, "
+                   f"Val F1 (Weighted): {val_metrics['f1_weighted']:.4f}")
+
+        # Save best performance
         if val_loss < best_loss:
             best_loss = val_loss
             best_epoch = epoch
             if args.save:
                 torch.save(model.state_dict(), os.path.join(output_path, "best_model.pt"))
-                print(f"Saved best model at epoch {epoch + 1} with Val Loss: {val_loss:.4f}")
+                tqdm.write(f"Saved best model at epoch {epoch + 1} with Val Loss: {val_loss:.4f}")
 
         # early stopping if loss does not improve for a patience of 10 epochs
         if (epoch - best_epoch) == 10:
-            print(f"Early stopping at epoch {epoch + 1}")
+            tqdm.write(f"Early stopping at epoch {epoch + 1}")
             break
+
+    tqdm.write("\nTraining complete. All epoch data saved to metrics_df.csv")
 
     # --- After the loop: Save all collected data ---
     print("\nTraining complete. Saving all epoch data...")
-
-    # Save losses
-
-    metrics_df = pd.DataFrame({"train_loss": train_losses,
-                               "val_loss": val_losses,
-                               "train_accuracy": train_accuracies,
-                               "val_accuracy": val_accuracies})
-
-    metrics_df.to_csv(os.path.join(output_path, 'metrics_df.csv'), index=False)
-
-    print(f"All epoch data (losses, accuracies) saved to {output_path}")
-
     # # load best model
     # model.load_state_dict(torch.load(os.path.join(output_path, "best_model.pt")))
     # test_dataset = CathPredDomainDataset(test_path, label_encoder, args.target_label_cols, fit=False)
