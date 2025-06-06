@@ -1,13 +1,14 @@
-import torch.nn as nn
 import torch
+from torch import nn
+
 
 class CathPred(nn.Module):
-    def __init__(self, configs):
+    def __init__(self, num_classes):
         super(CathPred, self).__init__()
 
         self.conv = nn.Conv1d(in_channels=1024, out_channels=256, kernel_size=3, padding=1)
-        self.fc = nn.Linear(256, 4) 
-                
+        self.fc = nn.Linear(256, num_classes)
+
     def train(self, mode=True):
         super().train(mode)
 

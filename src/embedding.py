@@ -14,7 +14,11 @@ class ProtT5Embeddings():
     def __init__(self, model_name="Rostlab/prot_t5_xl_half_uniref50-enc"):
         self.model_name = model_name
 
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+            print("Using MPS (Apple Silicon GPU) for training.")
+        else:
+            self.device = torch.device("cpu")
 
         # Load the pre-trained model and tokenizer
         print(f"Loading model: {model_name}")
