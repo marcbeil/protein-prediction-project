@@ -1,0 +1,2 @@
+domain_id,class,architecture,topology,homology,length,cath_domain_start,cath_domain_end,protein_sequence,domain_start,domain_end,domain_sequence
+1xi7A00,4,10,40,20,47,6,52,AMVSSTCIGHYQKCVNADKPCCSKTVRYGDSKNVRKFICDRDGEGVCVPFDGGVRGLPNGA,6,52,TCIGHYQKCVNADKPCCSKTVRYGDSKNVRKFICDRDGEGVCVPFDG
