@@ -10,6 +10,7 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from torch.nn.utils.rnn import pad_sequence
 
 from dataset import CathPredDomainDataset
 from model import CathPred
@@ -27,8 +28,7 @@ def train(model, train_dataloader, optimizer, loss_fn, device):
 
     # Loop over the batches of data
     for x, y in train_dataloader:
-        for k, v in x.items():
-            x[k] = v.to(device, non_blocking=True)
+        x = x["embedding"].to(device, non_blocking=True)
         y = y.to(device, non_blocking=True)
 
         # Zero the parameter gradients
@@ -82,8 +82,7 @@ def evaluate(model, val_dataloader, loss_fn, device):
     # Disable gradient computation for efficiency and to prevent accidental updates
     with torch.no_grad():
         for x, y in val_dataloader:
-            for k, v in x.items():
-                x[k] = v.to(device, non_blocking=True)
+            x = x["embedding"].to(device, non_blocking=True)
             y = y.to(device, non_blocking=True)
 
             with torch.autocast(device_type=device.type):
@@ -110,6 +109,32 @@ def evaluate(model, val_dataloader, loss_fn, device):
     # Return the average loss, and the collected predictions and true labels
     return avg_loss, all_preds, all_labels
 
+
+def protein_collate_fn(batch):
+    """
+    Pads the batches for the Dataloader
+    Args:
+        batch: List of tuples, each containing:
+            - dict: Dictionary with 'embedding' tensor (protein_length x 1024)
+            - torch.Tensor: Encoded numerical label
+
+    Returns:
+        tuple: (batch_dict, labels)
+            - batch_dict: dict with 'embedding' tensor of shape (batch_size, max_protein_length, 1024)
+            - labels: torch.Tensor of shape (batch_size,)
+    """
+    embeddings = []
+    labels = []
+
+    for embedding_dict, label in batch:
+        embeddings.append(embedding_dict["embedding"])
+        labels.append(label)
+
+    batch_embeddings = pad_sequence(embeddings, batch_first=True, padding_value=0.0)
+
+    batch_labels = torch.stack(labels, dim=0)
+
+    return {"embedding": batch_embeddings}, batch_labels
 
 def calculate_metrics(predictions, true_labels):
     """
@@ -155,7 +180,7 @@ def main():
                       help='Proportion for the training dataset')
     test.add_argument('-l', '--learning', default=0.0005, type=float,
                       help='Learning rate for model training')
-    test.add_argument('-d', '--weight_decay', default=0.01, type=float,
+    test.add_argument('-d', '--weight_decay', default=0.000001, type=float,
                       help='Weight decay (L2 penalty)')
     test.add_argument('-w', '--warmup', default=5, type=int,
                       help='Warm-up epochs for model training')
@@ -167,7 +192,7 @@ def main():
     run.add_argument('-t', '--target-label-cols', help='Output pytorch model',
                      choices=['class', 'class.architecture', 'class.architecture.topology',
                               'class.architecture.topology.homology'], default='class.architecture.topology.homology')
-    run.add_argument('-o', '--output', help='Output pytorch model', default='output')
+    run.add_argument('-o', '--output', help='Output pytorch model')
     run.add_argument('--overwrite', help='Overwrite files in output path', action='store_true', default=False)
     run.add_argument('-i', '--input_folder', help='Input data folder', default="datasets/v1")
 
@@ -202,9 +227,9 @@ def main():
     model.to(device)
 
     # Create DataLoaders
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch, shuffle=True, num_workers=11)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch, shuffle=True, num_workers=0, collate_fn=protein_collate_fn)
 
-    val_dataloader = DataLoader(val_dataset, batch_size=args.batch, num_workers=11)
+    val_dataloader = DataLoader(val_dataset, batch_size=args.batch, num_workers=0, collate_fn=protein_collate_fn)
 
     # Define optimizer with a scheduler
     optimizer = optim.AdamW(model.parameters(), lr=args.learning, weight_decay=args.weight_decay)
@@ -247,7 +272,11 @@ def main():
 
     for epoch in tqdm(range(args.epoch), desc="Training Progress"):
         train_loss, train_preds, train_labels = train(model, train_dataloader, optimizer, loss_fn, device)
-        val_loss, val_preds, val_labels = evaluate(model, val_dataloader, loss_fn, device)
+
+        if epoch >= 0:
+            val_loss, val_preds, val_labels = evaluate(model, val_dataloader, loss_fn, device)
+        else:
+            val_loss, val_preds, val_labels = train_loss, train_preds, train_labels
 
         scheduler.step()
 
