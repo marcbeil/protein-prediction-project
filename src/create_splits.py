@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 
 import pandas as pd
@@ -28,7 +29,7 @@ def main():
                                             description='Parameters for data splitting')
     split_group.add_argument('--test-size', type=float, default=0.2,
                              help='Proportion of the dataset to include in the test split (default: 0.2).')
-    split_group.add_argument('--val-size', type=float, default=0.25,
+    split_group.add_argument('--val-size', type=float, default=0.22,
                              help='Proportion of the training data to include in the validation split. '
                                   'Set to 0.0 for no separate validation set (default: 0.0). '
                                   'Note: This is a proportion of the *remaining* data after test split.')
@@ -221,7 +222,9 @@ def main():
     save_split_df(train_df, 'train_split.csv')
     save_split_df(val_df, 'val_split.csv')
     save_split_df(test_df, 'test_split.csv')
-
+    params = vars(args)
+    with open(os.path.join(output_dir, 'params.json'), 'w') as f:
+        json.dump(params, f)
     print("\nSplit statistics:")
     print(f"Total samples: {initial_df_len}")  # Report original total
     print(f"Samples after filtering rare classes: {len(df)}")  # Report samples after filtering
