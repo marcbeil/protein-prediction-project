@@ -1,0 +1,13 @@
+{
+    "epoch": 50,
+    "batch": 1,
+    "split": 0.7,
+    "learning": 0.0005,
+    "weight_decay": 0.01,
+    "warmup": 5,
+    "save": false,
+    "target_label_cols": "class.architecture.topology.homology",
+    "output": "output/protenn2/v1",
+    "overwrite": true,
+    "input_folder": "datasets/v3"
+}
