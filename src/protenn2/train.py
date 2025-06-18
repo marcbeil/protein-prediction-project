@@ -87,7 +87,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 
-def calculate_metrics(predictions, true_labels, no_domain_encoded_id):
+def calculate_metrics(predictions, true_labels, padding_encoded_id):
     """
     Calculates various classification metrics, excluding padded regions.
 
@@ -96,7 +96,7 @@ def calculate_metrics(predictions, true_labels, no_domain_encoded_id):
                                                 Expected shape: (N,) where N is total residues across batch/epoch.
         true_labels (torch.Tensor or np.array): True class labels.
                                                 Expected shape: (N,) where N is total residues across batch/epoch.
-        no_domain_encoded_id (int): The numerical ID used for padding 'no domain' regions.
+        padding_encoded_id (int): The numerical ID used for padding 'no domain' regions.
                                     Labels with this ID will be excluded from metric calculation.
 
     Returns:
@@ -117,7 +117,7 @@ def calculate_metrics(predictions, true_labels, no_domain_encoded_id):
     # Create a mask to identify non-padded positions
     # We filter based on true_labels not being the padding value.
     # This ensures we only evaluate where there's actual domain information.
-    mask = (true_labels != no_domain_encoded_id)
+    mask = (true_labels != padding_encoded_id)
 
     # Apply the mask to both true_labels and predictions
     filtered_true_labels = true_labels[mask]
@@ -212,7 +212,7 @@ def main():
     model.to(device)
     max_protein_length = calculate_max_protein_length(input_folder)
 
-    collate_fn = create_protein_collate_fn(max_protein_length, train_dataset.no_domain_encoded_id)
+    collate_fn = create_protein_collate_fn(max_protein_length, train_dataset.padding_encoded_id)
     # Create DataLoaders
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch, shuffle=True, collate_fn=collate_fn)
 
@@ -220,7 +220,7 @@ def main():
 
     optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
-    loss_fn = torch.nn.CrossEntropyLoss()
+    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=train_dataset.padding_encoded_id)
 
     print("--------------------------------------------------\nTraining")
 
@@ -258,8 +258,8 @@ def main():
 
         # Calculate metrics for the current epoch
         train_metrics = calculate_metrics(train_preds, train_labels,
-                                          no_domain_encoded_id=train_dataset.no_domain_encoded_id)
-        val_metrics = calculate_metrics(val_preds, val_labels, no_domain_encoded_id=val_dataset.no_domain_encoded_id)
+                                          padding_encoded_id=train_dataset.padding_encoded_id)
+        val_metrics = calculate_metrics(val_preds, val_labels, padding_encoded_id=val_dataset.padding_encoded_id)
 
         # Create a dictionary for the current epoch's metrics
         current_epoch_metrics = {

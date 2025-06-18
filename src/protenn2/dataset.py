@@ -10,6 +10,7 @@ from torch.utils.data import Dataset
 
 class CathPredPerResidueDataset(Dataset):
     NO_DOMAIN_LABEL = 'NO_DOMAIN_REGION'
+    PADDING_LABEL = 'PADDING_REGION'
 
     def __init__(self, data_df: Union[pd.DataFrame, str], label_encoder: LabelEncoder,
                  embedding_dir: str = "data/embeddings/protein_embeddings", fit: bool = False):
@@ -21,7 +22,7 @@ class CathPredPerResidueDataset(Dataset):
 
         cath_labels = sorted(list(self.data_df['cath'].unique()))
 
-        all_labels_to_encode = cath_labels + [self.NO_DOMAIN_LABEL]
+        all_labels_to_encode = cath_labels + [self.NO_DOMAIN_LABEL, self.PADDING_LABEL]
 
         if fit:
             self.label_encoder.fit(all_labels_to_encode)
@@ -29,6 +30,7 @@ class CathPredPerResidueDataset(Dataset):
 
         # Store the encoded ID for the 'no-domain' class for easy access
         self.no_domain_encoded_id = self.label_encoder.transform([self.NO_DOMAIN_LABEL])[0]
+        self.padding_encoded_id = self.label_encoder.transform([self.PADDING_LABEL])[0]
 
         self.encoded_labels = self.label_encoder.transform(self.data_df['cath'].tolist())
 
@@ -77,7 +79,7 @@ class CathPredPerResidueDataset(Dataset):
         return x, y_full_protein
 
 
-def create_protein_collate_fn(global_max_len: int, no_domain_encoded_id: int):
+def create_protein_collate_fn(global_max_len: int, padding_encoded_id: int):
     def protein_collate_fn(batch):
         embeddings = []
         labels = []
@@ -120,8 +122,7 @@ def create_protein_collate_fn(global_max_len: int, no_domain_encoded_id: int):
             current_label_length = label_tensor.shape[0]
             if current_label_length < global_max_len:
                 padding_needed = global_max_len - current_label_length
-                # Create a tensor filled with the no_domain_encoded_id for padding labels
-                padding = torch.full((padding_needed,), fill_value=no_domain_encoded_id,
+                padding = torch.full((padding_needed,), fill_value=padding_encoded_id,
                                      dtype=label_tensor.dtype,
                                      device=label_tensor.device)
                 # Concatenate the original label tensor with the padding
