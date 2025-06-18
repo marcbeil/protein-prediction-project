@@ -45,11 +45,14 @@ def main():
                              help='Minimum number of samples required for a class to be included in the dataset. '
                                   'Classes with fewer samples will be dropped. (default: 5).')
 
+    split_group.add_argument('--max-sequence-length', type=int, default=-1,
+                             help='Maximum sequence length for each sequence to be included in the dataset. Defaults to inf.')
+
     args = parser.parse_args()
 
     # Ensure output directory exists
     output_dir = os.path.abspath(args.output_folder)
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=False)
     print(f"Output directory set to: {output_dir}")
 
     # Load the dataset
@@ -86,6 +89,21 @@ def main():
             print(f"Converted '{col}' to integer type.")
         else:
             print(f"Warning: Column '{col}' not found in the input CSV. Skipping type conversion for it.")
+
+    target_label_col_list = ["class", "architecture", "topology", "homology"]
+    df['cath'] = df[target_label_col_list[0]].astype(str)
+    for col in target_label_col_list[1:]:
+        df['cath'] = df['cath'] + '.' + df[col].astype(str)
+
+    df["protein_length"] = df["protein_sequence"].str.len()
+    df["protein_id"] = df["domain_id"].str[:4]
+
+    if args.max_sequence_length > 0:
+        print(f"Max sequence length is set to {args.max_sequence_length}")
+        df_size = len(df)
+        df = df[df['protein_length'] < args.max_sequence_length]
+        print(
+            f"Size original df: {df_size} -> size after dropping rows where prot len > {args.max_sequence_length}: {len(df)}")
 
     # Handle stratification target dynamically based on --stratify-by argument
     stratify_target = None
@@ -205,6 +223,10 @@ def main():
 
     # --- Save full DataFrames to CSV files ---
     def save_split_df(df_split, filename):
+        desired_column_order = [
+            'protein_id', 'domain_id', 'domain_start', 'domain_end', 'protein_length',
+            'cath', 'class', 'architecture', 'topology', 'homology', 'protein_sequence'
+        ]
         if not df_split.empty:
             filepath = os.path.join(output_dir, filename)
             # Convert specified columns to integer type before saving
@@ -213,6 +235,9 @@ def main():
                 if col in df_split.columns:
                     # Use .astype('Int64') for nullable integers to handle potential NaNs
                     df_split[col] = df_split[col].astype('Int64')
+
+            cols_to_keep = [col for col in desired_column_order if col in df_split.columns]
+            df_split = df_split[cols_to_keep]
 
             df_split.to_csv(filepath, index=False)
             print(f"Saved {len(df_split)} samples to {filepath}")
