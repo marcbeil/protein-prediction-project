@@ -76,7 +76,7 @@ class CathPredPerResidueDataset(Dataset):
 
         y_full_protein[domain_start_idx:domain_end_idx] = encoded_cath_label
 
-        return x, y_full_protein
+        return x, y_full_protein, domain_id
 
 
 def create_protein_collate_fn(global_max_len: int, padding_encoded_id: int):
@@ -85,7 +85,7 @@ def create_protein_collate_fn(global_max_len: int, padding_encoded_id: int):
         labels = []
 
         # Iterate through each item in the batch to collect embeddings and labels
-        for embedding_dict, label_tensor in batch:
+        for embedding_dict, label_tensor, domain_id in batch:
             embeddings.append(embedding_dict["embedding"])
             labels.append(label_tensor)
 
@@ -135,6 +135,6 @@ def create_protein_collate_fn(global_max_len: int, padding_encoded_id: int):
         # Stack all the padded label tensors into a single batch tensor
         batch_labels = torch.stack(padded_labels, dim=0)
 
-        return {"embedding": batch_embeddings}, batch_labels
+        return {"embedding": batch_embeddings}, batch_labels, domain_id
 
     return protein_collate_fn

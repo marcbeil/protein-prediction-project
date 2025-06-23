@@ -22,7 +22,7 @@ def train(model, train_dataloader, optimizer, loss_fn, device):
     all_preds = []
     all_labels = []
 
-    for x, y in train_dataloader:
+    for x, y, _ in train_dataloader:
         for k, v in x.items():
             x[k] = v.to(device, non_blocking=True)
         y = y.to(device, non_blocking=True)
@@ -60,7 +60,7 @@ def evaluate(model, val_dataloader, loss_fn, device):
     all_labels = []
 
     with torch.no_grad():
-        for x, y in val_dataloader:
+        for x, y, _ in val_dataloader:
             for k, v in x.items():
                 x[k] = v.to(device, non_blocking=True)
             y = y.to(device, non_blocking=True)
