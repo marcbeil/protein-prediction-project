@@ -1,4 +1,6 @@
-import torch
+import torch, os
+import argparse
+from datetime import datetime
 import torch.nn as nn
 import pandas as pd
 from torch.utils.data import DataLoader, random_split
@@ -66,42 +68,60 @@ def predict_and_save(model, dataloader, device, output_path):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+            description=__doc__,
+            formatter_class=argparse.RawDescriptionHelpFormatter
+        )
+
+    test = parser.add_argument_group(title = 'Test parameters',
+                                     description = 'Parameters for testing model')
+    test.add_argument('-e', '--epoch', default = 50, type = int, 
+                      help = 'Epoch number for model training')
+    test.add_argument('-b', '--batch', default = 1, type = int, 
+                      help = 'Batch size for model training')
+    test.add_argument('-s', '--split', default = 0.8, type = float,
+                      help = 'Proportion for the training dataset')
+    test.add_argument('-l', '--learning', default = 0.0005, type = float, 
+                      help = 'Learning rate for model training')
+    test.add_argument('-d', '--weight_decay', default = 0.01, type = float, 
+                      help = 'Weight decay (L2 penalty)')
+    test.add_argument('-w', '--warmup', default = 5, type = int, 
+                      help = 'Warm-up epochs for model training')
+    
+    args = parser.parse_args()
+
     df_path = "/Users/b.madran/master/protein-prediction-project/data/subset50.cvs"
     embedding_dir = "/Users/b.madran/master/protein-prediction-project/data/prot_embeddings"
-    batch_size = 1
-    learning_rate = 1e-3
-    num_epochs = 50
-    patience = 10  # Early stopping patience
+    patience = 20  # Early stopping patience
     checkpoint_path = "best_model.pt"
-    log_dir = "runs/domain_boundary_experiment"
+    run_name = f"domain_boundary_lr{args.learning}_bs{args.batch}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    log_dir = os.path.join("runs", run_name)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     df = pd.read_csv(df_path)
     dataset = DomainBoundaryDataset(df, embedding_dir=embedding_dir)
 
-    # Split into train/val/test (80/10/10)
-    total_len = len(dataset)
-    train_len = int(0.8 * total_len)
-    val_len = int(0.1 * total_len)
-    test_len = total_len - train_len - val_len
+    num_train = int(args.split * len(dataset))
+    num_val = (len(dataset) - num_train) // 2
+    num_test = len(dataset) - num_train - num_val
 
-    train_set, val_set, test_set = random_split(dataset, [train_len, val_len, test_len],
+    train_set, val_set, test_set = random_split(dataset, [num_train, num_val, num_test],
                                                 generator=torch.Generator().manual_seed(42))
 
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_set, batch_size=batch_size)
-    test_loader = DataLoader(test_set, batch_size=batch_size)
+    train_loader = DataLoader(train_set, batch_size=args.batch, shuffle=True)
+    val_loader = DataLoader(val_set, batch_size=args.batch)
+    test_loader = DataLoader(test_set, batch_size=args.batch)
 
     model = DomainBoundaryCNN().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=2, factor=0.5)
     writer = SummaryWriter(log_dir=log_dir)
 
     best_val_loss = float('inf')
     epochs_without_improvement = 0
 
-    for epoch in range(1, num_epochs + 1):
+    for epoch in range(1, args.epoch + 1):
         train_loss = train(model, train_loader, optimizer, device)
         val_loss = evaluate(model, val_loader, device)
 
