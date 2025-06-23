@@ -84,15 +84,15 @@ if __name__ == "__main__":
     test.add_argument('-l', '--learning', default = 0.0005, type = float, 
                       help = 'Learning rate for model training')
     test.add_argument('-d', '--weight_decay', default = 0.01, type = float, 
-                      help = 'Weight decay (L2 penalty)')
+                      help = 'Weight decay (L2 penalty)') # TODO: not used currently
     test.add_argument('-w', '--warmup', default = 5, type = int, 
-                      help = 'Warm-up epochs for model training')
+                      help = 'Warm-up epochs for model training') # TODO: not used currently
     
     args = parser.parse_args()
 
     df_path = "/Users/b.madran/master/protein-prediction-project/data/subset50.cvs"
     embedding_dir = "/Users/b.madran/master/protein-prediction-project/data/prot_embeddings"
-    patience = 20  # Early stopping patience
+    patience = 50  # Early stopping patience
     checkpoint_path = "best_model.pt"
     run_name = f"domain_boundary_lr{args.learning}_bs{args.batch}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     log_dir = os.path.join("runs", run_name)
