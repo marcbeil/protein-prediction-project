@@ -136,7 +136,8 @@ def protein_collate_fn(batch):
 
     return {"embedding": batch_embeddings}, batch_labels
 
-def calculate_metrics(predictions, true_labels):
+
+def calculate_metrics(predictions, true_labels, label_encoder):
     """
     Calculates various classification metrics.
     Args:
@@ -161,6 +162,22 @@ def calculate_metrics(predictions, true_labels):
     metrics['precision_weighted'] = precision_score(true_labels, predictions, average='weighted', zero_division=0)
     metrics['recall_weighted'] = recall_score(true_labels, predictions, average='weighted', zero_division=0)
 
+    if label_encoder:
+        # per level prediction
+        prediction_cath = label_encoder.inverse_transform(predictions)
+        true_cath = label_encoder.inverse_transform(true_labels)
+
+        max_levels = 4
+
+        for level in range(1, max_levels + 1):
+            # Get hierarchy up to current level
+            pred_level = ['.'.join(label.split('.')[:level]) for label in prediction_cath]
+            true_level = ['.'.join(label.split('.')[:level]) for label in true_cath]
+
+            # Calculate accuracy
+            acc = accuracy_score(true_level, pred_level)
+            metrics[f'accuracy_level_{level}'] = acc
+
     return metrics
 
 
@@ -184,8 +201,6 @@ def main():
                       help='Weight decay (L2 penalty)')
     test.add_argument('-w', '--warmup', default=5, type=int,
                       help='Warm-up epochs for model training')
-    test.add_argument('-save', '--save', action='store_true',
-                      help='Save the model and training results')
 
     run = parser.add_argument_group(title='Prediction parameters',
                                     description='Parameters for Prediction using model')
@@ -194,6 +209,7 @@ def main():
                               'class.architecture.topology.homology'], default='class.architecture.topology.homology')
     run.add_argument('-o', '--output', help='Output pytorch model')
     run.add_argument('--overwrite', help='Overwrite files in output path', action='store_true', default=False)
+    run.add_argument('--test_mode', help='Testing the best model on the test set', action='store_true', default=False)
     run.add_argument('-i', '--input_folder', help='Input data folder', default="datasets/v1")
 
     args = parser.parse_args()
@@ -227,9 +243,10 @@ def main():
     model.to(device)
 
     # Create DataLoaders
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch, shuffle=True, num_workers=0, collate_fn=protein_collate_fn)
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch, shuffle=True, num_workers=1,
+                                  collate_fn=protein_collate_fn)
 
-    val_dataloader = DataLoader(val_dataset, batch_size=args.batch, num_workers=0, collate_fn=protein_collate_fn)
+    val_dataloader = DataLoader(val_dataset, batch_size=args.batch, num_workers=1, collate_fn=protein_collate_fn)
 
     # Define optimizer with a scheduler
     optimizer = optim.AdamW(model.parameters(), lr=args.learning, weight_decay=args.weight_decay)
@@ -241,10 +258,24 @@ def main():
     # Define loss criterion
     loss_fn = torch.nn.CrossEntropyLoss()
 
+    output_path = args.output
+    label_encoder_file_path = os.path.join(output_path, 'label_encoder.pkl')
+
+    if args.test_mode:
+        label_encoder = pickle.load(open(label_encoder_file_path, 'rb'))
+        test_dataset = CathPredDomainDataset(test_path, label_encoder, args.target_label_cols)
+        test_dataloader = DataLoader(test_dataset, batch_size=args.batch, num_workers=1, collate_fn=protein_collate_fn)
+        model.load_state_dict(torch.load(os.path.join(output_path, "best_model.pt")))
+        test_loss, test_preds, test_labels = evaluate(model, test_dataloader, loss_fn, device)
+        test_metrics = calculate_metrics(test_preds, test_labels, label_encoder)
+        print(test_metrics)
+        return
+
     print("--------------------------------------------------\nTraining")
 
-    output_path = args.output
     os.makedirs(output_path, exist_ok=True)
+    with open(label_encoder_file_path, "wb") as f:
+        pickle.dump(label_encoder, f)
 
     hyperparameters = vars(args)
     params_file_path = os.path.join(output_path, 'params.json')
@@ -252,9 +283,6 @@ def main():
         json.dump(hyperparameters, f, indent=4)
     tqdm.write(f"Hyperparameters saved to: {params_file_path}")
 
-    label_encoder_file_path = os.path.join(output_path, 'label_encoder.pkl')
-    with open(label_encoder_file_path, "wb") as f:
-        pickle.dump(label_encoder, f)
     tqdm.write(f"Label encoder saved to: {label_encoder_file_path}")
 
     # Training loop. 1 epoch = 1 Loop over the dataset:
@@ -281,8 +309,8 @@ def main():
         scheduler.step()
 
         # Calculate metrics for the current epoch
-        train_metrics = calculate_metrics(train_preds, train_labels)
-        val_metrics = calculate_metrics(val_preds, val_labels)
+        train_metrics = calculate_metrics(train_preds, train_labels, label_encoder)
+        val_metrics = calculate_metrics(val_preds, val_labels, label_encoder)
 
         # Create a dictionary for the current epoch's metrics
         current_epoch_metrics = {
@@ -322,9 +350,8 @@ def main():
         if val_loss < best_loss:
             best_loss = val_loss
             best_epoch = epoch
-            if args.save:
-                torch.save(model.state_dict(), os.path.join(output_path, "best_model.pt"))
-                tqdm.write(f"Saved best model at epoch {epoch + 1} with Val Loss: {val_loss:.4f}")
+            torch.save(model.state_dict(), os.path.join(output_path, "best_model.pt"))
+            tqdm.write(f"Saved best model at epoch {epoch + 1} with Val Loss: {val_loss:.4f}")
 
         # early stopping if loss does not improve for a patience of 10 epochs
         if (epoch - best_epoch) == 10:
@@ -335,24 +362,6 @@ def main():
 
     # --- After the loop: Save all collected data ---
     print("\nTraining complete. Saving all epoch data...")
-    # # load best model
-    # model.load_state_dict(torch.load(os.path.join(output_path, "best_model.pt")))
-    # test_dataset = CathPredDomainDataset(test_path, label_encoder, args.target_label_cols, fit=False)
-    # test_dataloader = DataLoader(test_dataset, batch_size=args.batch, shuffle=True, num_workers=11)
-    # # output all the correlations
-    # out_tensors_test, target_tensors_test = make_prediction(model, test_dataloader, device)
-    # testdf = create_prediction_df(test_dataset, out_tensors_test, target_tensors_test)
-    # testdf.to_parquet(os.path.join(output_path, 'model_prediction.parquet'))
-    # print(f"Test set predictions saved to: {os.path.join(output_path, 'model_prediction.parquet')}")
-    #
-    # train_unshuffled_dataloader = DataLoader(train_dataset, batch_size=args.batch, shuffle=False, pin_memory=True,
-    #                                          num_workers=14)
-    # out_tensors_train, target_tensors_train = make_prediction(model, train_unshuffled_dataloader, device)
-    # traindf = create_prediction_df(train_dataset, out_tensors_train, target_tensors_train)
-    # traindf.to_parquet(os.path.join(output_path, 'model_trainingset.parquet'))
-    # print(f"Training set predictions saved to: {os.path.join(output_path, 'model_trainingset.parquet')}")
-    #
-    # print("--------------------------------------------------\nFinished!")
 
 
 if __name__ == '__main__':
