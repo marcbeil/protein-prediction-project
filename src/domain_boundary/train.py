@@ -12,11 +12,13 @@ def create_protein_collate_fn(global_max_len: int, no_domain_encoded_id: int):
     def protein_collate_fn(batch):
         embeddings = []
         labels = []
+        domain_ids = []
 
         # Iterate through each item in the batch to collect embeddings and labels
         for embedding_dict, label_tensor in batch:
             embeddings.append(embedding_dict["embedding"])
             labels.append(label_tensor)
+            domain_ids.append(embedding_dict["domain_id"])
 
         # Determine the embedding dimension from the first embedding in the batch
         if not embeddings:
@@ -65,7 +67,7 @@ def create_protein_collate_fn(global_max_len: int, no_domain_encoded_id: int):
         # Stack all the padded label tensors into a single batch tensor
         batch_labels = torch.stack(padded_labels, dim=0)
 
-        return {"embedding": batch_embeddings}, batch_labels
+        return {"embedding": batch_embeddings, "domain_id": domain_ids }, batch_labels
 
     return protein_collate_fn
 
@@ -212,7 +214,7 @@ if __name__ == "__main__":
         if epochs_without_improvement >= patience:
             print(f"Early stopping triggered after {epoch} epochs.")
             break
-
+        
     writer.close()
 
     # Load the best model before testing
