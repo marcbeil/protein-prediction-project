@@ -8,6 +8,67 @@ from dataset import DomainBoundaryDataset
 from model import DomainBoundaryCNN
 from torch.utils.tensorboard import SummaryWriter
 
+def create_protein_collate_fn(global_max_len: int, no_domain_encoded_id: int):
+    def protein_collate_fn(batch):
+        embeddings = []
+        labels = []
+
+        # Iterate through each item in the batch to collect embeddings and labels
+        for embedding_dict, label_tensor in batch:
+            embeddings.append(embedding_dict["embedding"])
+            labels.append(label_tensor)
+
+        # Determine the embedding dimension from the first embedding in the batch
+        if not embeddings:
+            raise ValueError("Batch is empty, cannot determine embedding dimension.")
+        embedding_dim = embeddings[0].shape[1]
+
+        # Manually pad each embedding tensor to the global_max_len
+        padded_embeddings = []
+        for emb_tensor in embeddings:
+            current_length = emb_tensor.shape[0]
+
+            if current_length < global_max_len:
+                # Calculate the amount of padding needed
+                padding_needed = global_max_len - current_length
+                # Create a tensor of zeros for padding, matching the embedding's dtype and device
+                padding = torch.zeros((padding_needed, embedding_dim),
+                                      dtype=emb_tensor.dtype,
+                                      device=emb_tensor.device)
+                # Concatenate the original embedding with the padding
+                padded_emb = torch.cat([emb_tensor, padding], dim=0)
+            else:
+                # If current_length is already global_max_len or larger, truncate it
+                padded_emb = emb_tensor[:global_max_len]
+            padded_embeddings.append(padded_emb)
+
+        # Stack all the padded embedding tensors into a single batch tensor
+        batch_embeddings = torch.stack(padded_embeddings, dim=0)
+
+        # Manually pad each label tensor to the global_max_len
+        padded_labels = []
+        for label_tensor in labels:
+            current_label_length = label_tensor.shape[0]
+            if current_label_length < global_max_len:
+                padding_needed = global_max_len - current_label_length
+                # Create a tensor filled with the no_domain_encoded_id for padding labels
+                padding = torch.full((padding_needed,), fill_value=no_domain_encoded_id,
+                                     dtype=label_tensor.dtype,
+                                     device=label_tensor.device)
+                # Concatenate the original label tensor with the padding
+                padded_label = torch.cat([label_tensor, padding], dim=0)
+            else:
+                # If current_label_length is already global_max_len or larger, truncate it
+                padded_label = label_tensor[:global_max_len]
+            padded_labels.append(padded_label)
+
+        # Stack all the padded label tensors into a single batch tensor
+        batch_labels = torch.stack(padded_labels, dim=0)
+
+        return {"embedding": batch_embeddings}, batch_labels
+
+    return protein_collate_fn
+
 def train(model, dataloader, optimizer, device):
     model.train()
     criterion = nn.CrossEntropyLoss()
@@ -19,7 +80,7 @@ def train(model, dataloader, optimizer, device):
 
         optimizer.zero_grad()
         logits = model(x)
-        loss = criterion(logits.view(-1, logits.size(-1)), y.view(-1))
+        loss = criterion(logits.reshape(-1, logits.size(-1)), y.reshape(-1))
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
@@ -39,7 +100,7 @@ def evaluate(model, dataloader, device):
             y = y.to(device)
 
             logits = model(x)
-            loss = criterion(logits.view(-1, logits.size(-1)), y.view(-1))
+            loss = criterion(logits.reshape(-1, logits.size(-1)), y.reshape(-1))
             total_loss += loss.item()
 
     return total_loss / len(dataloader)
@@ -77,7 +138,7 @@ if __name__ == "__main__":
                                      description = 'Parameters for testing model')
     test.add_argument('-e', '--epoch', default = 50, type = int, 
                       help = 'Epoch number for model training')
-    test.add_argument('-b', '--batch', default = 1, type = int, 
+    test.add_argument('-b', '--batch', default = 16, type = int, 
                       help = 'Batch size for model training')
     test.add_argument('-s', '--split', default = 0.8, type = float,
                       help = 'Proportion for the training dataset')
@@ -92,7 +153,7 @@ if __name__ == "__main__":
 
     df_path = "/Users/b.madran/master/protein-prediction-project/data/subset50.cvs"
     embedding_dir = "/Users/b.madran/master/protein-prediction-project/data/prot_embeddings"
-    patience = 50  # Early stopping patience
+    patience = 8  # Early stopping patience
     checkpoint_path = "best_model.pt"
     run_name = f"domain_boundary_lr{args.learning}_bs{args.batch}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     log_dir = os.path.join("runs", run_name)
@@ -108,10 +169,13 @@ if __name__ == "__main__":
 
     train_set, val_set, test_set = random_split(dataset, [num_train, num_val, num_test],
                                                 generator=torch.Generator().manual_seed(42))
+    
+    max_protein_length = df["protein_length"].max()
+    collate_fn = create_protein_collate_fn(max_protein_length, 0)
 
-    train_loader = DataLoader(train_set, batch_size=args.batch, shuffle=True)
-    val_loader = DataLoader(val_set, batch_size=args.batch)
-    test_loader = DataLoader(test_set, batch_size=args.batch)
+    train_loader = DataLoader(train_set, batch_size=args.batch, shuffle=True, collate_fn=collate_fn)
+    val_loader = DataLoader(val_set, batch_size=args.batch, collate_fn=collate_fn)
+    test_loader = DataLoader(test_set, batch_size=args.batch, collate_fn=collate_fn)
 
     model = DomainBoundaryCNN().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning)
