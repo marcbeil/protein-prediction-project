@@ -111,23 +111,45 @@ def evaluate(model, dataloader, device):
 def predict_and_save(model, dataloader, device, output_path):
     model.eval()
     predictions = []
+    all_preds = []
+    all_labels = []
 
     with torch.no_grad():
         for x, y in dataloader:
             x = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in x.items()}
+            y = y.to(device)  # shape: (B, L)
 
-            logits = model(x)  # shape: (1, L, C)
-            preds = torch.argmax(logits, dim=-1).squeeze(0).cpu().numpy()  # shape: (L,)
-            domain_id = x["domain_id"][0]  # assuming it's passed in x
+            logits = model(x)  # shape: (B, L, C)
+            preds = torch.argmax(logits, dim=-1)  # shape: (B, L)
 
-            predictions.append({
-                "domain_id": domain_id,
-                "prediction": preds.tolist()
-            })
+            all_preds.append(preds.cpu())
+            all_labels.append(y.cpu())
 
-    # Save as a CSV
+            domain_ids = x["domain_id"]
+            preds_np = preds.cpu().numpy()
+
+            for domain_id, pred in zip(domain_ids, preds_np):
+                predictions.append({
+                    "domain_id": domain_id,
+                    "prediction": pred.tolist()
+                })
+
+    # Save predictions
     pd.DataFrame(predictions).to_json(output_path, orient="records", lines=True)
     print(f"Test predictions saved to: {output_path}")
+
+    # Compute domain detection accuracy
+    all_preds = torch.cat(all_preds, dim=0)
+    all_labels = torch.cat(all_labels, dim=0)
+
+    mask = (all_labels != 0)              # Only positions that are domain in ground truth
+    detected = (all_preds != 0)           # Only positions predicted as domain (any label ≠ 0)
+    correct_domain_detection = detected & mask
+
+    accuracy = correct_domain_detection.sum().item() / mask.sum().item()
+
+    print(f"Domain detection accuracy (pred ≠ 0 | true ≠ 0): {accuracy:.4f}")
+
 
 
 if __name__ == "__main__":
@@ -140,7 +162,7 @@ if __name__ == "__main__":
                                      description = 'Parameters for testing model')
     test.add_argument('-e', '--epoch', default = 50, type = int, 
                       help = 'Epoch number for model training')
-    test.add_argument('-b', '--batch', default = 16, type = int, 
+    test.add_argument('-b', '--batch', default = 8, type = int, 
                       help = 'Batch size for model training')
     test.add_argument('-s', '--split', default = 0.8, type = float,
                       help = 'Proportion for the training dataset')
@@ -155,7 +177,7 @@ if __name__ == "__main__":
 
     df_path = "/Users/b.madran/master/protein-prediction-project/data/subset50.cvs"
     embedding_dir = "/Users/b.madran/master/protein-prediction-project/data/prot_embeddings"
-    patience = 8  # Early stopping patience
+    patience = 6  # Early stopping patience
     checkpoint_path = "best_model.pt"
     run_name = f"domain_boundary_lr{args.learning}_bs{args.batch}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     log_dir = os.path.join("runs", run_name)
