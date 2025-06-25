@@ -11,6 +11,10 @@ from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch.nn.utils.rnn import pad_sequence
+from torch.utils.tensorboard import SummaryWriter
+
+import numpy as np
+
 
 from dataset import CathPredDomainDataset
 from model import CathPred
@@ -180,6 +184,84 @@ def calculate_metrics(predictions, true_labels, label_encoder):
 
     return metrics
 
+def showSamplePredictions(true_cath, prediction_cath):
+    # Log 20 sample pairs with green highlighting
+    print("\n" + "=" * 60)
+    print("SAMPLE PREDICTIONS (Green = Correct)")
+    print("=" * 60)
+
+    sample_size = min(100, len(prediction_cath))
+    for i in range(sample_size):
+        pred = prediction_cath[i]
+        true = true_cath[i]
+
+        pred_parts = pred.split('.')
+        true_parts = true.split('.')
+
+        # Find matching levels
+        match_level = 0
+        for j in range(min(len(pred_parts), len(true_parts))):
+            if pred_parts[j] == true_parts[j]:
+                match_level += 1
+            else:
+                break
+
+        # Create colored output
+        pred_colored = ""
+        true_colored = ""
+
+        for j, part in enumerate(pred_parts):
+            if j < match_level:
+                pred_colored += f"\033[92m{part}\033[0m"  # Green
+            else:
+                pred_colored += f"\033[91m{part}\033[0m"  # Red
+            if j < len(pred_parts) - 1:
+                pred_colored += "."
+
+        for j, part in enumerate(true_parts):
+            if j < match_level:
+                true_colored += f"\033[92m{part}\033[0m"  # Green
+            else:
+                true_colored += f"\033[91m{part}\033[0m"  # Red
+            if j < len(true_parts) - 1:
+                true_colored += "."
+
+        print(f"{i + 1:2d}. Pred: {pred_colored}")
+        print(f"    True: {true_colored}")
+        print()
+
+def bootstrapping(test_preds, test_labels, label_encoder):
+    n_iterations = 1000
+    n_size = len(test_labels)
+
+    all_boot_metrics = []
+
+    # Convert labels and preds to numpy arrays for indexing
+    test_preds = np.array(test_preds)
+    test_labels = np.array(test_labels)
+
+    for i in range(n_iterations):
+        indices = np.random.choice(range(n_size), size=n_size, replace=True)
+
+        sample_preds = test_preds[indices]
+        sample_labels = test_labels[indices]
+
+        # Calculate metrics for this bootstrap sample
+        boot_metrics = calculate_metrics(sample_preds, sample_labels, label_encoder)
+
+        all_boot_metrics.append(boot_metrics)
+
+    # === Summarize Bootstrapped Metrics ===
+    # Example: summarizing accuracy
+    accuracies = [m['accuracy'] for m in all_boot_metrics]
+
+    mean_acc = np.mean(accuracies)
+    lower_acc = np.percentile(accuracies, 2.5)
+    upper_acc = np.percentile(accuracies, 97.5)
+
+    print(f"\nBootstrapped Accuracy: {mean_acc:.4f} (95% CI: {lower_acc:.4f} - {upper_acc:.4f})")
+
+    return
 
 def main():
     parser = argparse.ArgumentParser(
@@ -269,11 +351,15 @@ def main():
         test_loss, test_preds, test_labels = evaluate(model, test_dataloader, loss_fn, device)
         test_metrics = calculate_metrics(test_preds, test_labels, label_encoder)
         print(test_metrics)
+        bootstrapping(test_preds, test_labels, label_encoder)
         return
 
     print("--------------------------------------------------\nTraining")
 
     os.makedirs(output_path, exist_ok=True)
+    print("output/tensorboard_logs/" + output_path.split("/")[-1])
+    writer = SummaryWriter(log_dir="output/tensorboard_logs/" + output_path.split("/")[-1])
+
     with open(label_encoder_file_path, "wb") as f:
         pickle.dump(label_encoder, f)
 
@@ -339,6 +425,14 @@ def main():
         # Save the DataFrame to CSV after each epoch
         metrics_df.to_csv(os.path.join(output_path, 'metrics_df.csv'), index=False)
 
+        writer.add_scalars('Loss', {'Train': train_loss, 'Validation': val_loss}, epoch)
+        writer.add_scalars('Accuracy', {'Train': train_metrics['accuracy'], 'Validation': val_metrics['accuracy']},
+                           epoch)
+        writer.add_scalars('F1_Weighted',
+                           {'Train': train_metrics['f1_weighted'], 'Validation': val_metrics['f1_weighted']}, epoch)
+        writer.add_scalars('F1_Macro', {'Train': train_metrics['f1_macro'], 'Validation': val_metrics['f1_macro']},
+                           epoch)
+
         # Update tqdm description with current epoch metrics using tqdm.write
         tqdm.write(f"Epoch {epoch + 1}/{args.epoch}")
         tqdm.write(f"Train Loss: {train_loss:.4f}, Train Acc: {train_metrics['accuracy']:.4f}, "
@@ -359,6 +453,8 @@ def main():
             break
 
     tqdm.write("\nTraining complete. All epoch data saved to metrics_df.csv")
+
+    writer.close()
 
     # --- After the loop: Save all collected data ---
     print("\nTraining complete. Saving all epoch data...")
