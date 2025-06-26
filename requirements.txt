@@ -6,3 +6,5 @@ sentencepiece
 hf_xet
 pandas
 plotly
+tensorboard
+py3Dmol
