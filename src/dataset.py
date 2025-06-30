@@ -75,7 +75,7 @@ class CathPredDomainDataset(Dataset):
 
         Returns:
             tuple: A tuple containing:
-                   - dict: A dictionary with the 'embedding' tensor for the domain.
+                   - dict: A dictionary with the 'embedding' tensor for the domain. (protein_length * 1024)
                    - torch.Tensor: The encoded numerical label for the domain.
         """
         domain_id = self.domain_ids[index]
