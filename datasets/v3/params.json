@@ -1,0 +1,9 @@
+{
+  "input_file": "data/subset_protein_mapped_enhanced_limited_len_600.csv",
+  "output_folder": "datasets/v3",
+  "test_size": 0.1,
+  "val_size": 0.22,
+  "random_state": 42,
+  "stratify_by": "class.architecture.topology.homology",
+  "min_samples_per_class": 5
+}

@@ -1,0 +1,10 @@
+{
+    "epoch": 100,
+    "batch": 16,
+    "learning_rate": 0.001,
+    "weight_decay": 0.01,
+    "output": "output/protenn2/v6",
+    "overwrite": true,
+    "input_folder": "datasets/v5",
+    "patience": 40
+}

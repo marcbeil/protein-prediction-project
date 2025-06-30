@@ -82,13 +82,24 @@ def main():
     output_dir = os.path.join(cwd, args.output_folder)
     os.makedirs(output_dir, exist_ok=True)
 
+    print(f"Initial rows in dataset: {len(dataset)}")
+    original_unique_proteins = dataset['protein_id'].nunique()
+    print(f"Initial unique proteins: {original_unique_proteins}")
+
+    # Filter for distinct proteins
+    # If a protein_id appears multiple times with potentially different protein_sequences,
+    # .drop_duplicates() will keep the first occurrence by default.
+    dataset.drop_duplicates(subset=['protein_id'], inplace=True)
+    print(f"Rows after dropping duplicate protein_ids: {len(dataset)}")
+    print(f"Unique proteins after deduplication: {dataset['protein_id'].nunique()}")
+
     # Store the count of sequences that will actually be processed
     sequences_to_embed_count = len(dataset)
 
     if not args.overwrite:
         already_embedded_set = {filename[:-4] for filename in os.listdir(output_dir)}
         original_len = len(dataset)
-        dataset = dataset[~dataset['domain_id'].isin(already_embedded_set)]
+        dataset = dataset[~dataset['protein_id'].isin(already_embedded_set)]
         print(
             f"{original_len - len(dataset)} sequences were already embedded. {len(dataset)} sequences will be embedded now.")
         sequences_to_embed_count = len(dataset)
@@ -103,14 +114,14 @@ def main():
     for i in tqdm(range(0, len(dataset), args.batch_size), desc="Processing batches"):
         batch_df = dataset[i:i + args.batch_size]
         prot_sequences = batch_df['protein_sequence'].tolist()
-        domain_ids = batch_df['domain_id'].tolist()
+        protein_ids = batch_df['protein_id'].tolist()
 
         if prot_sequences:
             embeddings = protT5Embeddings.embed_sequences(prot_sequences)
-            for j, domain_id in enumerate(domain_ids):
+            for j, protein_id in enumerate(protein_ids):
                 prot_sequence = prot_sequences[j]
                 protein_embedding = embeddings[j, :len(prot_sequence)].cpu()
-                protein_embedding_path = os.path.join(output_dir, f"{domain_id}")
+                protein_embedding_path = os.path.join(output_dir, f"{protein_id}")
                 np.save(protein_embedding_path, protein_embedding)
 
     end_time = time.time()
