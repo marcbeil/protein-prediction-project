@@ -7,6 +7,7 @@ import pandas as pd
 import torch.optim as optim
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from dataset import CathPredPerResidueDataset, create_protein_collate_fn
@@ -22,7 +23,7 @@ def train(model, train_dataloader, optimizer, loss_fn, device):
     all_preds = []
     all_labels = []
 
-    for x, y in train_dataloader:
+    for x, y, _ in train_dataloader:
         for k, v in x.items():
             x[k] = v.to(device, non_blocking=True)
         y = y.to(device, non_blocking=True)
@@ -60,7 +61,7 @@ def evaluate(model, val_dataloader, loss_fn, device):
     all_labels = []
 
     with torch.no_grad():
-        for x, y in val_dataloader:
+        for x, y, _ in val_dataloader:
             for k, v in x.items():
                 x[k] = v.to(device, non_blocking=True)
             y = y.to(device, non_blocking=True)
@@ -87,7 +88,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 
-def calculate_metrics(predictions, true_labels, no_domain_encoded_id):
+def calculate_metrics(predictions, true_labels, padding_encoded_id):
     """
     Calculates various classification metrics, excluding padded regions.
 
@@ -96,7 +97,7 @@ def calculate_metrics(predictions, true_labels, no_domain_encoded_id):
                                                 Expected shape: (N,) where N is total residues across batch/epoch.
         true_labels (torch.Tensor or np.array): True class labels.
                                                 Expected shape: (N,) where N is total residues across batch/epoch.
-        no_domain_encoded_id (int): The numerical ID used for padding 'no domain' regions.
+        padding_encoded_id (int): The numerical ID used for padding 'no domain' regions.
                                     Labels with this ID will be excluded from metric calculation.
 
     Returns:
@@ -117,7 +118,7 @@ def calculate_metrics(predictions, true_labels, no_domain_encoded_id):
     # Create a mask to identify non-padded positions
     # We filter based on true_labels not being the padding value.
     # This ensures we only evaluate where there's actual domain information.
-    mask = (true_labels != no_domain_encoded_id)
+    mask = (true_labels != padding_encoded_id)
 
     # Apply the mask to both true_labels and predictions
     filtered_true_labels = true_labels[mask]
@@ -182,8 +183,10 @@ def main():
     run.add_argument('--overwrite', help='Overwrite files in output path', action='store_true', default=False)
     run.add_argument('-i', '--input_folder', help='Input data folder', default="datasets/v1")
 
-    args = parser.parse_args()
+    run.add_argument('--patience', help='Number of epochs to wait before early stopping', default=10, type=int)
 
+    args = parser.parse_args()
+    writer = SummaryWriter("output/protenn2/tensorboard_logs")
     if os.path.exists(args.output):
         if args.overwrite:
             print("Output folder already exists. Overwriting")
@@ -212,7 +215,7 @@ def main():
     model.to(device)
     max_protein_length = calculate_max_protein_length(input_folder)
 
-    collate_fn = create_protein_collate_fn(max_protein_length, train_dataset.no_domain_encoded_id)
+    collate_fn = create_protein_collate_fn(max_protein_length, train_dataset.padding_encoded_id)
     # Create DataLoaders
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch, shuffle=True, collate_fn=collate_fn)
 
@@ -220,7 +223,7 @@ def main():
 
     optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
-    loss_fn = torch.nn.CrossEntropyLoss()
+    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=train_dataset.padding_encoded_id)
 
     print("--------------------------------------------------\nTraining")
 
@@ -258,8 +261,8 @@ def main():
 
         # Calculate metrics for the current epoch
         train_metrics = calculate_metrics(train_preds, train_labels,
-                                          no_domain_encoded_id=train_dataset.no_domain_encoded_id)
-        val_metrics = calculate_metrics(val_preds, val_labels, no_domain_encoded_id=val_dataset.no_domain_encoded_id)
+                                          padding_encoded_id=train_dataset.padding_encoded_id)
+        val_metrics = calculate_metrics(val_preds, val_labels, padding_encoded_id=val_dataset.padding_encoded_id)
 
         # Create a dictionary for the current epoch's metrics
         current_epoch_metrics = {
@@ -281,7 +284,24 @@ def main():
             "val_precision_weighted": val_metrics['precision_weighted'],
             "val_recall_weighted": val_metrics['recall_weighted'],
         }
-
+        writer.add_scalars('Loss', {'Train': train_loss, 'Validation': val_loss}, epoch)
+        writer.add_scalars('Accuracy', {'Train': train_metrics['accuracy'], 'Validation': val_metrics['accuracy']},
+                           epoch)
+        writer.add_scalars('F1 Score/Macro',
+                           {'Train': train_metrics['f1_macro'], 'Validation': val_metrics['f1_macro']}, epoch)
+        writer.add_scalars('Precision/Macro',
+                           {'Train': train_metrics['precision_macro'], 'Validation': val_metrics['precision_macro']},
+                           epoch)
+        writer.add_scalars('Recall/Macro',
+                           {'Train': train_metrics['recall_macro'], 'Validation': val_metrics['recall_macro']}, epoch)
+        writer.add_scalars('F1 Score/Weighted',
+                           {'Train': train_metrics['f1_weighted'], 'Validation': val_metrics['f1_weighted']}, epoch)
+        writer.add_scalars('Precision/Weighted', {'Train': train_metrics['precision_weighted'],
+                                                  'Validation': val_metrics['precision_weighted']}, epoch)
+        writer.add_scalars('Recall/Weighted',
+                           {'Train': train_metrics['recall_weighted'], 'Validation': val_metrics['recall_weighted']},
+                           epoch)
+        writer.flush()
         # Append the current epoch's metrics as a new row to the DataFrame
         metrics_df = pd.concat([metrics_df, pd.DataFrame([current_epoch_metrics])], ignore_index=True)
 
@@ -303,10 +323,11 @@ def main():
             tqdm.write(f"Saved best model at epoch {epoch + 1} with Val Loss: {val_loss:.4f}")
 
         # early stopping if loss does not improve for a patience of 10 epochs
-        if (epoch - best_epoch) == 10:
+        if (epoch - best_epoch) == args.patience:
             tqdm.write(f"Early stopping at epoch {epoch + 1}")
             break
 
+    writer.close()
     tqdm.write("\nTraining complete. All epoch data saved to metrics_df.csv")
 
 
