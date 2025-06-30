@@ -162,11 +162,11 @@ if __name__ == "__main__":
                                      description = 'Parameters for testing model')
     test.add_argument('-e', '--epoch', default = 50, type = int, 
                       help = 'Epoch number for model training')
-    test.add_argument('-b', '--batch', default = 8, type = int, 
+    test.add_argument('-b', '--batch', default = 16, type = int,
                       help = 'Batch size for model training')
     test.add_argument('-s', '--split', default = 0.8, type = float,
                       help = 'Proportion for the training dataset')
-    test.add_argument('-l', '--learning', default = 0.0005, type = float, 
+    test.add_argument('-l', '--learning', default = 0.005, type = float,
                       help = 'Learning rate for model training')
     test.add_argument('-d', '--weight_decay', default = 0.01, type = float, 
                       help = 'Weight decay (L2 penalty)') # TODO: not used currently
@@ -175,14 +175,14 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
-    df_path = "/Users/b.madran/master/protein-prediction-project/data/subset50.cvs"
-    embedding_dir = "/Users/b.madran/master/protein-prediction-project/data/prot_embeddings"
-    patience = 6  # Early stopping patience
+    df_path = "/Users/bene/Developer/protein-prediction-project/data/subset_protein_mapped_enhanced_limited_len_600.csv"
+    embedding_dir = "/Users/bene/Developer/protein-prediction-project/data/embeddings/protein_embeddings"
+    patience = 3  # Early stopping patience
     checkpoint_path = "best_model.pt"
     run_name = f"domain_boundary_lr{args.learning}_bs{args.batch}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     log_dir = os.path.join("runs", run_name)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = "mps"#torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     df = pd.read_csv(df_path)
     dataset = DomainBoundaryDataset(df, embedding_dir=embedding_dir)
@@ -201,7 +201,7 @@ if __name__ == "__main__":
     val_loader = DataLoader(val_set, batch_size=args.batch, collate_fn=collate_fn)
     test_loader = DataLoader(test_set, batch_size=args.batch, collate_fn=collate_fn)
 
-    model = DomainBoundaryCNN().to(device)
+    model = DomainBoundaryCNN(max_length=max_protein_length).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=2, factor=0.5)
     writer = SummaryWriter(log_dir=log_dir)
@@ -242,5 +242,5 @@ if __name__ == "__main__":
     # Load the best model before testing
     model.load_state_dict(torch.load(checkpoint_path))
 
-    output_json = "/Users/b.madran/master/protein-prediction-project/data/test_predictions.json"
+    output_json = "/Users/bene/Developer/protein-prediction-project/data/domain_boundary_predictions_2.json"
     predict_and_save(model, test_loader, device, output_json)
