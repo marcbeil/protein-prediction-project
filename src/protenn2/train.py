@@ -7,6 +7,7 @@ import pandas as pd
 import torch.optim as optim
 from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from dataset import CathPredPerResidueDataset, create_protein_collate_fn
@@ -182,8 +183,10 @@ def main():
     run.add_argument('--overwrite', help='Overwrite files in output path', action='store_true', default=False)
     run.add_argument('-i', '--input_folder', help='Input data folder', default="datasets/v1")
 
-    args = parser.parse_args()
+    run.add_argument('--patience', help='Number of epochs to wait before early stopping', default=10, type=int)
 
+    args = parser.parse_args()
+    writer = SummaryWriter("output/protenn2/tensorboard_logs")
     if os.path.exists(args.output):
         if args.overwrite:
             print("Output folder already exists. Overwriting")
@@ -281,7 +284,24 @@ def main():
             "val_precision_weighted": val_metrics['precision_weighted'],
             "val_recall_weighted": val_metrics['recall_weighted'],
         }
-
+        writer.add_scalars('Loss', {'Train': train_loss, 'Validation': val_loss}, epoch)
+        writer.add_scalars('Accuracy', {'Train': train_metrics['accuracy'], 'Validation': val_metrics['accuracy']},
+                           epoch)
+        writer.add_scalars('F1 Score/Macro',
+                           {'Train': train_metrics['f1_macro'], 'Validation': val_metrics['f1_macro']}, epoch)
+        writer.add_scalars('Precision/Macro',
+                           {'Train': train_metrics['precision_macro'], 'Validation': val_metrics['precision_macro']},
+                           epoch)
+        writer.add_scalars('Recall/Macro',
+                           {'Train': train_metrics['recall_macro'], 'Validation': val_metrics['recall_macro']}, epoch)
+        writer.add_scalars('F1 Score/Weighted',
+                           {'Train': train_metrics['f1_weighted'], 'Validation': val_metrics['f1_weighted']}, epoch)
+        writer.add_scalars('Precision/Weighted', {'Train': train_metrics['precision_weighted'],
+                                                  'Validation': val_metrics['precision_weighted']}, epoch)
+        writer.add_scalars('Recall/Weighted',
+                           {'Train': train_metrics['recall_weighted'], 'Validation': val_metrics['recall_weighted']},
+                           epoch)
+        writer.flush()
         # Append the current epoch's metrics as a new row to the DataFrame
         metrics_df = pd.concat([metrics_df, pd.DataFrame([current_epoch_metrics])], ignore_index=True)
 
@@ -303,10 +323,11 @@ def main():
             tqdm.write(f"Saved best model at epoch {epoch + 1} with Val Loss: {val_loss:.4f}")
 
         # early stopping if loss does not improve for a patience of 10 epochs
-        if (epoch - best_epoch) == 10:
+        if (epoch - best_epoch) == args.patience:
             tqdm.write(f"Early stopping at epoch {epoch + 1}")
             break
 
+    writer.close()
     tqdm.write("\nTraining complete. All epoch data saved to metrics_df.csv")
 
 
