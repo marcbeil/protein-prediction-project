@@ -1,11 +1,12 @@
 import torch, os
 import argparse
+from pathlib import Path
 from datetime import datetime
 import torch.nn as nn
 import pandas as pd
 from torch.utils.data import DataLoader, random_split
 from dataset import DomainBoundaryDataset
-from model import DomainBoundaryCNN
+from model import DomainBoundaryCNN, DomainBoundaryLinear
 from torch.utils.tensorboard import SummaryWriter
 
 def create_protein_collate_fn(global_max_len: int, no_domain_encoded_id: int):
@@ -173,35 +174,48 @@ if __name__ == "__main__":
     test.add_argument('-w', '--warmup', default = 5, type = int, 
                       help = 'Warm-up epochs for model training') # TODO: not used currently
     
-    args = parser.parse_args()
+    #TODO: Change accordingly
+    trainGroundTruth = 'train_split.csv'
+    valGroundTruth = 'val_split.csv'
+    testGroundTruth = 'test_split.csv'
+    version = 'v5'
 
-    df_path = "/Users/b.madran/master/protein-prediction-project/data/subset50.cvs"
-    embedding_dir = "/Users/b.madran/master/protein-prediction-project/data/prot_embeddings"
+    args = parser.parse_args()
+    current_path = Path.cwd()
+    train_path = current_path / 'datasets'/ version / trainGroundTruth
+    val_path = current_path / 'datasets'/ version / valGroundTruth
+    test_path = current_path / 'datasets'/ version / testGroundTruth
+    
+
+    embedding_dir = current_path / 'data' / 'prot_embeddings'
     patience = 6  # Early stopping patience
     checkpoint_path = "best_model.pt"
     run_name = f"domain_boundary_lr{args.learning}_bs{args.batch}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     log_dir = os.path.join("runs", run_name)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    train_df = pd.read_csv(train_path)
+    train_dataset = DomainBoundaryDataset(train_df, embedding_dir=embedding_dir)
+    val_df = pd.read_csv(val_path)
+    val_dataset = DomainBoundaryDataset(val_df, embedding_dir=embedding_dir)
+    test_df = pd.read_csv(test_path)
+    test_dataset = DomainBoundaryDataset(test_df, embedding_dir=embedding_dir)
+        
+    max_protein_length = max_protein_length = max(
+        train_df["protein_length"].max(),
+        val_df["protein_length"].max(),
+        test_df["protein_length"].max()
+        )
 
-    df = pd.read_csv(df_path)
-    dataset = DomainBoundaryDataset(df, embedding_dir=embedding_dir)
-
-    num_train = int(args.split * len(dataset))
-    num_val = (len(dataset) - num_train) // 2
-    num_test = len(dataset) - num_train - num_val
-
-    train_set, val_set, test_set = random_split(dataset, [num_train, num_val, num_test],
-                                                generator=torch.Generator().manual_seed(42))
-    
-    max_protein_length = df["protein_length"].max()
     collate_fn = create_protein_collate_fn(max_protein_length, 0)
 
-    train_loader = DataLoader(train_set, batch_size=args.batch, shuffle=True, collate_fn=collate_fn)
-    val_loader = DataLoader(val_set, batch_size=args.batch, collate_fn=collate_fn)
-    test_loader = DataLoader(test_set, batch_size=args.batch, collate_fn=collate_fn)
+    train_loader = DataLoader(train_df, batch_size=args.batch, shuffle=True, collate_fn=collate_fn)
+    val_loader = DataLoader(val_df, batch_size=args.batch, collate_fn=collate_fn)
+    test_loader = DataLoader(test_df, batch_size=args.batch, collate_fn=collate_fn)
 
     model = DomainBoundaryCNN().to(device)
+    model = DomainBoundaryLinear().to(device)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=2, factor=0.5)
     writer = SummaryWriter(log_dir=log_dir)
@@ -241,6 +255,6 @@ if __name__ == "__main__":
 
     # Load the best model before testing
     model.load_state_dict(torch.load(checkpoint_path))
-
-    output_json = "/Users/b.madran/master/protein-prediction-project/data/test_predictions.json"
+    #TODO: change to relative path
+    output_json = current_path / 'data' / ' test_predictions_' + run_name + ".json"
     predict_and_save(model, test_loader, device, output_json)
