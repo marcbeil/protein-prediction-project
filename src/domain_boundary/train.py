@@ -209,9 +209,9 @@ if __name__ == "__main__":
 
     collate_fn = create_protein_collate_fn(max_protein_length, 0)
 
-    train_loader = DataLoader(train_df, batch_size=args.batch, shuffle=True, collate_fn=collate_fn)
-    val_loader = DataLoader(val_df, batch_size=args.batch, collate_fn=collate_fn)
-    test_loader = DataLoader(test_df, batch_size=args.batch, collate_fn=collate_fn)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch, shuffle=True, collate_fn=collate_fn)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch, collate_fn=collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch, collate_fn=collate_fn)
 
     model = DomainBoundaryCNN().to(device)
     model = DomainBoundaryLinear().to(device)
