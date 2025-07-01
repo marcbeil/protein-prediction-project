@@ -253,15 +253,32 @@ def bootstrapping(test_preds, test_labels, label_encoder):
 
     # === Summarize Bootstrapped Metrics ===
     # Example: summarizing accuracy
-    accuracies = [m['accuracy'] for m in all_boot_metrics]
 
-    mean_acc = np.mean(accuracies)
-    lower_acc = np.percentile(accuracies, 2.5)
-    upper_acc = np.percentile(accuracies, 97.5)
+    # accuracy, accuracy_level_1, ... 4
+    accuracy_keys = ['accuracy', 'accuracy_level_1', 'accuracy_level_2', 'accuracy_level_3', 'accuracy_level_4']
 
-    print(f"\nBootstrapped Accuracy: {mean_acc:.4f} (95% CI: {lower_acc:.4f} - {upper_acc:.4f})")
+    confidence_intervals = {}
 
-    return
+    for acc_key in accuracy_keys:
+        # Extract accuracy values for this level
+        accuracies = [m[acc_key] for m in all_boot_metrics if acc_key in m]
+
+        if accuracies:  # Only calculate if this accuracy level exists
+            mean_acc = np.mean(accuracies)
+            lower_acc = np.percentile(accuracies, 2.5)
+            upper_acc = np.percentile(accuracies, 97.5)
+
+            confidence_intervals[acc_key] = {
+                'mean': mean_acc,
+                'lower_ci': lower_acc,
+                'upper_ci': upper_acc
+            }
+
+            # Print results
+            level_name = acc_key.replace('_', ' ').title()
+            print(f"Bootstrapped {level_name}: {mean_acc:.4f} (95% CI: {lower_acc:.4f} - {upper_acc:.4f})")
+
+    return confidence_intervals
 
 def main():
     parser = argparse.ArgumentParser(
@@ -279,10 +296,12 @@ def main():
                       help='Proportion for the training dataset')
     test.add_argument('-l', '--learning', default=0.0005, type=float,
                       help='Learning rate for model training')
-    test.add_argument('-d', '--weight_decay', default=0.000001, type=float,
+    test.add_argument('-d', '--weight_decay', default=0.01, type=float,
                       help='Weight decay (L2 penalty)')
     test.add_argument('-w', '--warmup', default=5, type=int,
                       help='Warm-up epochs for model training')
+
+    test.add_argument( '--one_hot', default=False, type=bool)
 
     run = parser.add_argument_group(title='Prediction parameters',
                                     description='Parameters for Prediction using model')
@@ -313,16 +332,27 @@ def main():
                                                                                                   'val_split.csv'), os.path.join(
         input_folder, 'test_split.csv')
     print("--------------------------------------------------\nData loading")
+
     label_encoder = LabelEncoder()
-    train_dataset = CathPredDomainDataset(train_path, label_encoder, args.target_label_cols, fit=True)
+
+    train_dataset = CathPredDomainDataset(train_path, label_encoder, args.target_label_cols, one_hot=args.one_hot, fit=True)
 
     val_dataset = CathPredDomainDataset(val_path, label_encoder, args.target_label_cols)
 
     num_classes = len(label_encoder.classes_)
     print("Number of classes: {}".format(num_classes))
     # initiate the model
-    model = CathPred(num_classes=num_classes)
-    model.to(device)
+
+    if args.one_hot:
+
+        print("One-hot encoding")
+
+        model = CathPred(num_classes=num_classes)
+        model.to(device)
+
+    else:
+        model = CathPred(num_classes=num_classes)
+        model.to(device)
 
     # Create DataLoaders
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch, shuffle=True, num_workers=1,
