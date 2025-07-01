@@ -7,7 +7,7 @@ class CathPred(nn.Module):
         super(CathPred, self).__init__()
 
         self.conv = nn.Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, padding=1)
-        self.fc = nn.Linear(256, num_classes)
+        self.fc = nn.Linear(out_channels, num_classes)
 
     def forward(self, x):
         x = x.permute(0, 2, 1)  # (B, L, 1024) → (B, 1024, L)

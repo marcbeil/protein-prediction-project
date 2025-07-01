@@ -40,7 +40,12 @@ class CathPredDomainDataset(Dataset):
         self.label_encoder = label_encoder  # Rename parameter to label_encoder
 
         self.one_hot = one_hot
-        self.one_hot_encoder = one_hot_encoder
+
+        if one_hot:
+            amino_acids = ['A', 'R', 'N', 'D', 'C', 'E', 'Q', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W',
+                           'Y', 'V', 'X']
+            self.one_hot_encoder = OneHotEncoder(categories=[amino_acids], handle_unknown='ignore')
+            self.one_hot_encoder.fit(np.array(amino_acids).reshape(-1, 1))
 
         target_label_col_list = target_label_cols.split('.')
 
@@ -64,24 +69,7 @@ class CathPredDomainDataset(Dataset):
         # The output of transform is a 1D numpy array of integers
         self.encoded_labels = self.label_encoder.transform(self.labels).tolist()
 
-    def generate_one_hot_encoder(self):
-        # List of standard amino acids
-        amino_acids = [
-            'A', 'R', 'N', 'D', 'C',
-            'E', 'Q', 'G', 'H', 'I',
-            'L', 'K', 'M', 'F', 'P',
-            'S', 'T', 'W', 'Y', 'V'
-        ]
 
-        # Initialize the sklearn OneHotEncoder
-        one_hot_encoder = OneHotEncoder(
-            categories=[amino_acids],  # Explicit categories in order
-            handle_unknown='ignore',  # Ignore unknown amino acids
-        )
-
-        # Fit the encoder
-        one_hot_encoder.fit(np.array(amino_acids).reshape(-1, 1))
-        return one_hot_encoder
 
     def __len__(self):
         """
@@ -110,7 +98,6 @@ class CathPredDomainDataset(Dataset):
 
         if self.one_hot and self.one_hot_encoder is not None:
             domain_chain = self.data_df["protein_sequence"][index][domain_start_idx:domain_end_idx]
-            print(domain_chain)
             amino_acids = list(domain_chain)
             domain_embedding = self.one_hot_encoder.transform(
                 [[aa] for aa in amino_acids]

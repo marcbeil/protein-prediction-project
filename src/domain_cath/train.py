@@ -301,7 +301,7 @@ def main():
     test.add_argument('-w', '--warmup', default=5, type=int,
                       help='Warm-up epochs for model training')
 
-    test.add_argument( '--one_hot', default=False, type=bool)
+
 
     run = parser.add_argument_group(title='Prediction parameters',
                                     description='Parameters for Prediction using model')
@@ -312,7 +312,7 @@ def main():
     run.add_argument('--overwrite', help='Overwrite files in output path', action='store_true', default=False)
     run.add_argument('--test_mode', help='Testing the best model on the test set', action='store_true', default=False)
     run.add_argument('-i', '--input_folder', help='Input data folder', default="datasets/v1")
-
+    run.add_argument('--one_hot', default=False, type=bool)
     args = parser.parse_args()
 
     if os.path.exists(args.output):
@@ -347,7 +347,7 @@ def main():
 
         print("One-hot encoding")
 
-        model = CathPred(num_classes=num_classes)
+        model = CathPred(num_classes=num_classes, in_channels= 21, out_channels=21)
         model.to(device)
 
     else:
