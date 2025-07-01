@@ -256,5 +256,6 @@ if __name__ == "__main__":
     # Load the best model before testing
     model.load_state_dict(torch.load(checkpoint_path))
     #TODO: change to relative path
-    output_json = current_path / 'data' / ' test_predictions_' + run_name + ".json"
+
+    output_json = current_path / 'data' / f'test_predictions_{run_name}.json'
     predict_and_save(model, test_loader, device, output_json)
