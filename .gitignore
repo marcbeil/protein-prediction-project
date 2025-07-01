@@ -190,3 +190,4 @@ data/domains-and-seqs.csv
 .junie/
 
 data/embeddings
+**/visualization_results/
