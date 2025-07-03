@@ -9,7 +9,8 @@ def run_inference(
         model,
         dataloader,
         padding_encoded_id: int,
-        device: torch.device = torch.device("cpu")
+        device: torch.device = torch.device("cpu"),
+        return_protein_chain_id=False
 ) -> Tuple[List[np.ndarray], List[np.ndarray]]:
     """
     Run model inference and return trimmed ground truth and probabilities.
@@ -30,11 +31,11 @@ def run_inference(
 
     y_true_list = []
     probabilities_list = []
-
+    protein_chain_id_list = []
     print(f"Running inference on {len(dataloader)} proteins...")
 
     with torch.no_grad():
-        for i, (x, y_true_batch, domain_id_batch) in enumerate(tqdm(dataloader, desc="Inference Progress")):
+        for i, (x, y_true_batch, protein_chain_id) in enumerate(tqdm(dataloader, desc="Inference Progress")):
             # Get ground truth
             # y_true_batch[0] assumes batch size of 1 for correct trimming per protein
             y_true_protein_full = y_true_batch[0].cpu().numpy()
@@ -61,7 +62,62 @@ def run_inference(
 
             y_true_list.append(y_true_trimmed)
             probabilities_list.append(probabilities_trimmed)
+            protein_chain_id_list.append(protein_chain_id[0])
 
     print(f"Inference complete. Processed {len(y_true_list)} proteins")
+    if return_protein_chain_id:
+        return y_true_list, probabilities_list, protein_chain_id_list
+    return y_true_list, probabilities_list
+
+
+def run_inference_dummy(
+        dummy_classifier,
+        dataloader,
+        padding_encoded_id: int,
+        majority_label: int,
+        num_classes: int
+) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+    """
+    Run dummy inference and return trimmed ground truth and dummy probabilities.
+
+    Args:
+        dummy_classifier: Callable that returns predicted labels for a given true label array.
+        dataloader: DataLoader for inference (expects batch size 1)
+        padding_encoded_id: ID used for padding tokens
+
+    Returns:
+        Tuple of (y_true_list, probabilities_list), where:
+            - y_true_list: List of np.ndarray, shape (seq_len,)
+            - probabilities_list: List of np.ndarray, shape (seq_len, num_classes)
+    """
+    y_true_list = []
+    probabilities_list = []
+
+    print(f"Running dummy inference on {len(dataloader)} proteins...")
+
+    for i, (_, y_true_batch, _) in enumerate(tqdm(dataloader, desc="Dummy Inference Progress")):
+        # Get full true labels
+        y_true_full = y_true_batch[0].cpu().numpy()
+
+        # Trim padding
+        padding_start = np.where(y_true_full == padding_encoded_id)[0]
+        seq_len = padding_start[0] if padding_start.size > 0 else len(y_true_full)
+        y_true_trimmed = y_true_full[:seq_len]
+
+        # Get dummy predictions from the classifier
+        y_pred_dummy = dummy_classifier(y_true_trimmed, majority_label)
+
+        # Convert to one-hot encoded probability-like vectors
+
+        probs_dummy = np.eye(num_classes)[y_pred_dummy]
+
+        y_true_list.append(y_true_trimmed)
+        probabilities_list.append(probs_dummy)
+
+    print(f"Dummy inference complete. Processed {len(y_true_list)} proteins.")
 
     return y_true_list, probabilities_list
+
+
+def dummy_majority_classifier_per_protein(y_true_trimmed: np.ndarray, majority_label) -> np.ndarray:
+    return np.full_like(y_true_trimmed, majority_label)
