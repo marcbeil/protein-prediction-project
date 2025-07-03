@@ -6,6 +6,7 @@ from typing import Tuple, List
 import numpy as np
 import pandas as pd
 import torch
+from scipy.ndimage import gaussian_filter1d
 
 from src.protenn2.dataset import CathPredPerResidueDataset
 
@@ -161,32 +162,49 @@ def call_domains(
         confidences: np.ndarray,
         no_domain_label_id: int,
         reporting_threshold: float = 0.5,
-        region_min_length: int = 20
+        region_min_length: int = 20,
+        gaussian_sigma: float = 0.0
 ):
     """
     Converts a per-residue confidence array into a list of domain calls,
-    following the ProtENN2 paper's domain calling procedure.
+    following the ProtENN2 paper's domain calling procedure, with optional Gaussian smoothing.
 
     Args:
         confidences: A 2D numpy array of values between 0 and 1 (inclusive).
                      Shape: (sequence_length, number_of_output_classes).
                      Each cell [r, c] represents the confidence that residue 'r'
                      belongs to class 'c'.
+        no_domain_label_id: The integer ID used to represent residues that do not belong to any domain.
         reporting_threshold: All confidences above this value are considered for
                              inclusion in a potential domain. Default is 0.5.
         region_min_length: Only return regions (domains) that are at least this
                            long. Default is 20.
+        gaussian_sigma: The standard deviation for the Gaussian filter.
+                        If 0.0, no smoothing is applied. Larger values mean more smoothing.
 
     Returns:
-        List of tuples (predicted_class_index, start_index, end_index).
+        A 1D numpy array of predicted class indices for each residue.
         The predicted_class_index corresponds to the column index in the
         'confidences' array (e.g., an index representing a Pfam family ID).
-        Start and end indices are 0-based, with the end index being exclusive.
+        Residues not assigned to a domain will have 'no_domain_label_id'.
     """
     sequence_length = confidences.shape[0]
+    num_classes = confidences.shape[1]
 
-    # 1. Threshold the raw confidence predictions
-    thresholded_confidences = confidences > reporting_threshold
+    # --- Optional: Apply Gaussian Smoothing ---
+    if gaussian_sigma > 0:
+        smoothed_confidences = np.copy(confidences)  # Work on a copy to avoid modifying original input
+        for i in range(num_classes):
+            # Apply Gaussian filter to each column (class) independently
+            smoothed_confidences[:, i] = gaussian_filter1d(smoothed_confidences[:, i], sigma=gaussian_sigma)
+        # Ensure values remain within [0, 1] after smoothing
+        smoothed_confidences = np.clip(smoothed_confidences, 0, 1)
+        confidences_to_threshold = smoothed_confidences
+    else:
+        confidences_to_threshold = confidences
+
+    # 1. Threshold the (optionally smoothed) confidence predictions
+    thresholded_confidences = confidences_to_threshold > reporting_threshold
 
     # 2. Coalesce contiguous regions for each class
     contiguous_regions = _coalesce_contiguous_regions(thresholded_confidences)
@@ -195,7 +213,6 @@ def call_domains(
     long_contiguous_regions = _filter_region_length(contiguous_regions, region_min_length)
 
     # 4. Initialize the output 1D array with the 'no_domain_label'
-    # This assumes 0 is the "no domain" class. Adjust if your dataset uses a different ID.
     predicted_labels_1d = np.full(sequence_length, no_domain_label_id, dtype=int)
 
     # 5. Populate the 1D array with predicted class IDs for the identified domains
@@ -210,10 +227,14 @@ def call_domains_list(
         confidences_list: List[np.ndarray],
         no_domain_label_id: int,
         reporting_threshold: float = 0.5,
-        region_min_length: int = 20
+        region_min_length: int = 20,
+        gaussian_sigma: float = 0.0  # Pass new parameter through
 ):
-    return [call_domains(confidences, no_domain_label_id=no_domain_label_id, reporting_threshold=reporting_threshold,
-                         region_min_length=region_min_length) for confidences in confidences_list]
+    return [call_domains(confidences, no_domain_label_id=no_domain_label_id,
+                         reporting_threshold=reporting_threshold,
+                         region_min_length=region_min_length,
+                         gaussian_sigma=gaussian_sigma)
+            for confidences in confidences_list]
 
 
 def get_device() -> torch.device:

@@ -6,6 +6,7 @@ from sklearn.metrics import accuracy_score, f1_score, jaccard_score, recall_scor
 from tqdm import tqdm
 
 from src.protenn2.analysis.cath_hierarchy_mapper import CATHHierarchyMapper
+from src.protenn2.analysis.sov import segment_overlap_score
 
 
 # --- Bootstrapping Confidence Interval Function (no changes needed here) ---
@@ -44,10 +45,13 @@ def bootstrap_confidence_interval(
 
     bootstrap_scores = []
 
-    y_true_all_flat = np.concatenate([d[0] for d in protein_data])
-    y_pred_all_flat = np.concatenate([d[1] for d in protein_data])
-
-    original_score = metric_func(y_true_all_flat, y_pred_all_flat, **kwargs)
+    if metric_func.__name__ == "segment_overlap_score":
+        y_true_all, y_pred_all = zip(*protein_data)
+        original_score = metric_func(y_true_all, y_pred_all, **kwargs)
+    else:
+        y_true_all_flat = np.concatenate([d[0] for d in protein_data])
+        y_pred_all_flat = np.concatenate([d[1] for d in protein_data])
+        original_score = metric_func(y_true_all_flat, y_pred_all_flat, **kwargs)
 
     if num_bootstrap_samples <= 0:
         return {
@@ -62,9 +66,14 @@ def bootstrap_confidence_interval(
         resampled_indices = [random.randrange(n_proteins) for _ in range(n_proteins)]
         resampled_data = [protein_data[i] for i in resampled_indices]
 
-        y_true_resampled_flat = np.concatenate([d[0] for d in resampled_data])
-        y_pred_resampled_flat = np.concatenate([d[1] for d in resampled_data])
-        score = metric_func(y_true=y_true_resampled_flat, y_pred=y_pred_resampled_flat, **kwargs)
+        if metric_func.__name__ == "segment_overlap_score":
+            y_true_all, y_pred_all = zip(*resampled_data)
+            score = metric_func(y_true_all, y_pred_all, **kwargs)
+        else:
+            y_true_resampled_flat = np.concatenate([d[0] for d in resampled_data])
+            y_pred_resampled_flat = np.concatenate([d[1] for d in resampled_data])
+            score = metric_func(y_true_resampled_flat, y_pred_resampled_flat, **kwargs)
+
         bootstrap_scores.append(score)
 
     # Calculate confidence interval using the percentile method
@@ -81,73 +90,94 @@ def bootstrap_confidence_interval(
     }
 
 
-def calculate_metrics(protein_data, num_classes, bootstrap_samples: int = 1000):
+def calculate_metrics(protein_data, num_classes, bootstrap_samples: int = 1000,
+                      metrics_to_compute=("accuracy", "f1_score", "jaccard_score", "recall_score", "precision_score",
+                                          "segment_overlap_score")):
     all_results = {}
-    print("----- Accuracy Metrics -----")
-    acc_results = bootstrap_confidence_interval(
-        protein_data=protein_data,
-        metric_func=accuracy_score,
-        num_bootstrap_samples=bootstrap_samples,
-    )
-    all_results["accuracy"] = acc_results
-    print(acc_results)
+    all_metrics = ("accuracy", "f1_score", "jaccard_score", "recall_score", "precision_score",
+                   "segment_overlap_score")
+    if all_metrics[0] in metrics_to_compute:
+        print("----- Accuracy Metrics -----")
+        acc_results = bootstrap_confidence_interval(
+            protein_data=protein_data,
+            metric_func=accuracy_score,
+            num_bootstrap_samples=bootstrap_samples,
+        )
+        all_results["accuracy"] = acc_results
+        print(acc_results)
+    if all_metrics[1] in metrics_to_compute:
+        print("----- F1 Score Metrics -----")
+        f1_results_post = bootstrap_confidence_interval(
+            protein_data=protein_data,
+            metric_func=f1_score,
+            num_bootstrap_samples=bootstrap_samples,
+            # additional params for metric func
+            average='weighted'
+        )
+        all_results["f1_score"] = f1_results_post
+        print(f1_results_post)
 
-    print("----- F1 Score Metrics -----")
-    f1_results_post = bootstrap_confidence_interval(
-        protein_data=protein_data,
-        metric_func=f1_score,
-        num_bootstrap_samples=bootstrap_samples,
-        # additional params for metric func
-        average='weighted'
-    )
-    all_results["f1_score"] = f1_results_post
-    print(f1_results_post)
+    if all_metrics[2] in metrics_to_compute:
+        print("----- Jaccard Score Metrics -----")
+        jaccard_results = bootstrap_confidence_interval(
+            protein_data=protein_data,
+            metric_func=jaccard_score,
+            num_bootstrap_samples=bootstrap_samples,
+            # additional params for metric func
+            average="weighted",
+            zero_division=0,
+            # Skip no_domain_encoded and padding
+            labels=range(num_classes - 2)
+        )
+        all_results["jaccard_score"] = jaccard_results
+        print(jaccard_results)
 
-    print("----- Jaccard Score Metrics -----")
-    jaccard_results = bootstrap_confidence_interval(
-        protein_data=protein_data,
-        metric_func=jaccard_score,
-        num_bootstrap_samples=bootstrap_samples,
-        # additional params for metric func
-        average="weighted",
-        zero_division=0,
-        # Skip no_domain_encoded and padding
-        labels=range(num_classes - 2)
-    )
-    all_results["jaccard_score"] = jaccard_results
-    print(jaccard_results)
+    if all_metrics[3] in metrics_to_compute:
+        print("----- Recall Score Metrics -----")
+        recall_results = bootstrap_confidence_interval(
+            protein_data=protein_data,
+            metric_func=recall_score,
+            num_bootstrap_samples=bootstrap_samples,
+            average="weighted",
+            zero_division=np.nan,
+            labels=range(num_classes - 2)
+        )
+        all_results["recall_score"] = recall_results
+        print(recall_results)
 
-    print("----- Recall Score Metrics -----")
-    recall_results = bootstrap_confidence_interval(
-        protein_data=protein_data,
-        metric_func=recall_score,
-        num_bootstrap_samples=bootstrap_samples,
-        average="weighted",
-        zero_division=np.nan,
-        labels=range(num_classes - 2)
-    )
-    all_results["recall_score"] = recall_results
-    print(recall_results)
+    if all_metrics[4] in metrics_to_compute:
+        print("----- Precision Score Metrics -----")
+        precision_results = bootstrap_confidence_interval(
+            protein_data=protein_data,
+            metric_func=precision_score,
+            num_bootstrap_samples=bootstrap_samples,
+            average="weighted",
+            zero_division=np.nan,
+            labels=range(num_classes - 2)
+        )
+        all_results["precision_score"] = precision_results
+        print(precision_results)
 
-    print("----- Precision Score Metrics -----")
-    precision_results = bootstrap_confidence_interval(
-        protein_data=protein_data,
-        metric_func=precision_score,
-        num_bootstrap_samples=bootstrap_samples,
-        average="weighted",
-        zero_division=np.nan,
-        labels=range(num_classes - 2)
-    )
-    all_results["precision_score"] = precision_results
-    print(precision_results)
-
+    if all_metrics[5] in metrics_to_compute:
+        print("----- Segment Overlap Score Metrics -----")
+        sov_results = bootstrap_confidence_interval(protein_data=protein_data, metric_func=segment_overlap_score,
+                                                    num_bootstrap_samples=bootstrap_samples,
+                                                    no_domain_label_id=num_classes - 2)
+        all_results["segment_overlap_score"] = sov_results
+        print(sov_results)
     return all_results
 
 
 def calculate_metrics_for_cath_levels(y_true_labels_list, y_pred_confidences_list, mapper: CATHHierarchyMapper,
                                       bootstrap_samples: int = 1000, levels=("C", "A", "T", "H"),
-                                      post_process_func=None, post_process_kwargs=None):
+                                      metrics_to_compute=("accuracy", "f1_score", "jaccard_score", "recall_score",
+                                                          "precision_score",
+                                                          "segment_overlap_score"),
+                                      post_process_func=None, post_process_kwargs=None
+
+                                      ):
     all_results = {}
+
     for level in levels:
         print(f"---- Computing Metrics for hierarchy: {level}")
         y_true_labels_list_level, y_pred_confidences_list_level = mapper.map_y_true_labels_y_pred_confidences_lists(
@@ -158,7 +188,8 @@ def calculate_metrics_for_cath_levels(y_true_labels_list, y_pred_confidences_lis
         per_protein_data_level = list(zip(y_true_labels_list_level, y_pred_labels_list_level))
         num_classes = mapper.get_class_count(level)
         all_results[f"raw_{level}"] = calculate_metrics(per_protein_data_level, num_classes=num_classes,
-                                                        bootstrap_samples=bootstrap_samples)
+                                                        bootstrap_samples=bootstrap_samples,
+                                                        metrics_to_compute=metrics_to_compute, )
         if post_process_func is not None:
             if post_process_kwargs is None:
                 post_process_kwargs = {"no_domain_label_id": num_classes - 2}
@@ -167,5 +198,6 @@ def calculate_metrics_for_cath_levels(y_true_labels_list, y_pred_confidences_lis
             y_pred_labels_list_post_level = post_process_func(y_pred_confidences_list_level, **post_process_kwargs)
             per_protein_data_post_level = list(zip(y_true_labels_list_level, y_pred_labels_list_post_level))
             all_results[f"post_{level}"] = calculate_metrics(per_protein_data_post_level, num_classes=num_classes,
-                                                             bootstrap_samples=bootstrap_samples)
+                                                             bootstrap_samples=bootstrap_samples,
+                                                             metrics_to_compute=metrics_to_compute)
     return all_results
