@@ -103,36 +103,79 @@ class CathPredDomainDataset(Dataset):
                 [[aa] for aa in amino_acids]
             ).toarray()
 
+
         else:
+
             path_to_embedding = os.path.join(self.embedding_dir, f"{domain_id}.npy")
 
             # Handle missing embedding files
+
             if not os.path.exists(path_to_embedding):
                 # Fallback or raise error, depending on desired behavior
+
                 # For now, let's return None or a placeholder for this sample,
+
                 # which will need handling in the DataLoader or collation.
+
                 # A better approach might be to filter out invalid samples during dataset creation.
+
                 print(f"Error: Embedding file not found for {domain_id} at {path_to_embedding}. Skipping.")
+
                 return None, None  # Returning None will cause issues in DataLoader if not handled by a custom collate_fn
 
             full_protein_embedding = np.load(path_to_embedding)
 
-            # Updated: Log warning for invalid domain indices and skip if severe issues are found
-            # (e.g., start >= end implies empty or invalid slice)
+            # Handle invalid domain indices by padding with zeros
+
             if domain_start_idx < 0 or domain_end_idx > full_protein_embedding.shape[
                 0] or domain_start_idx >= domain_end_idx:
-                print(
-                    f"Warning: Invalid domain indices for {domain_id}: start={domain_start_idx}, end={domain_end_idx}, shape={full_protein_embedding.shape}. Skipping this sample.")
-                # Return None or handle appropriately to prevent errors later.
-                # For this example, we'll return a placeholder, ideally, filter these out beforehand.
-                return None, None
 
-            domain_embedding = full_protein_embedding[domain_start_idx:domain_end_idx, :]
+                print(
+
+                    f"Warning: Invalid domain indices for {domain_id}: start={domain_start_idx}, end={domain_end_idx}, shape={full_protein_embedding.shape}. Filling with zeros.")
+
+                # Calculate the expected domain length
+
+                expected_length = max(1, domain_end_idx - domain_start_idx)  # Ensure at least length 1
+
+                embedding_dim = 1024
+
+                # Create a zero-filled embedding
+
+                domain_embedding = np.zeros((expected_length, embedding_dim), dtype=np.float32)
+
+                # If we have valid overlapping regions, fill those parts
+
+                actual_start = max(0, domain_start_idx)
+
+                actual_end = min(full_protein_embedding.shape[0], domain_end_idx)
+
+                if actual_start < actual_end and domain_start_idx < full_protein_embedding.shape[
+                    0] and domain_end_idx > 0:
+                    # Calculate the slice in the domain_embedding to fill
+
+                    fill_start = max(0, actual_start - domain_start_idx)
+
+                    fill_end = fill_start + (actual_end - actual_start)
+
+                    # Fill the valid portion with actual embedding data
+
+                    domain_embedding[fill_start:fill_end, :] = full_protein_embedding[actual_start:actual_end, :]
+
+            else:
+
+                # Normal case: extract the domain embedding
+
+                domain_embedding = full_protein_embedding[domain_start_idx:domain_end_idx, :]
 
         x = {
+
             "embedding": torch.tensor(domain_embedding, dtype=torch.float32)
+
         }
 
         # 'y' will now be a single integer, which is what CrossEntropyLoss expects.
+
         y = torch.tensor(encoded_label, dtype=torch.long)
+
         return x, y

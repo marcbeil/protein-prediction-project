@@ -182,7 +182,7 @@ if __name__ == "__main__":
     run_name = f"domain_boundary_lr{args.learning}_bs{args.batch}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     log_dir = os.path.join("runs", run_name)
 
-    device = "mps"#torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = "mps"
 
     df = pd.read_csv(df_path)
     dataset = DomainBoundaryDataset(df, embedding_dir=embedding_dir)

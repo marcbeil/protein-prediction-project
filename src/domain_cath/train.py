@@ -380,6 +380,12 @@ def main():
         model.load_state_dict(torch.load(os.path.join(output_path, "best_model.pt")))
         test_loss, test_preds, test_labels = evaluate(model, test_dataloader, loss_fn, device)
         test_metrics = calculate_metrics(test_preds, test_labels, label_encoder)
+
+        pred_df = pd.read_csv(test_path)
+        cath_predictions = label_encoder.inverse_transform(test_preds)
+        pred_df["cath_prediction"] = cath_predictions
+        pred_df.to_csv(os.path.join(output_path, "test_predicted.csv"), index=False)
+
         print(test_metrics)
         bootstrapping(test_preds, test_labels, label_encoder)
         return
