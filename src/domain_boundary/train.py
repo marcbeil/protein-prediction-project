@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import torch.nn as nn
 import pandas as pd
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 from dataset import DomainBoundaryDataset
 from model import DomainBoundaryCNN, DomainBoundaryLinear
 from torch.utils.tensorboard import SummaryWriter
@@ -72,9 +72,9 @@ def create_protein_collate_fn(global_max_len: int, no_domain_encoded_id: int):
 
     return protein_collate_fn
 
-def train(model, dataloader, optimizer, device):
+def train(model, dataloader, optimizer, device, weight):
     model.train()
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(weight = weight)
     total_loss = 0.0
 
     for x, y in dataloader:
@@ -91,9 +91,9 @@ def train(model, dataloader, optimizer, device):
     return total_loss / len(dataloader)
 
 
-def evaluate(model, dataloader, device):
+def evaluate(model, dataloader, device, weight):
     model.eval()
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(weight = weight)
     total_loss = 0.0
 
     with torch.no_grad():
@@ -161,7 +161,7 @@ if __name__ == "__main__":
 
     test = parser.add_argument_group(title = 'Test parameters',
                                      description = 'Parameters for testing model')
-    test.add_argument('-e', '--epoch', default = 50, type = int, 
+    test.add_argument('-e', '--epoch', default = 25, type = int, 
                       help = 'Epoch number for model training')
     test.add_argument('-b', '--batch', default = 8, type = int, 
                       help = 'Batch size for model training')
@@ -180,6 +180,12 @@ if __name__ == "__main__":
     testGroundTruth = 'test_split.csv'
     version = 'v5'
 
+    # weight = torch.tensor([0.0176, 1.9846, 0.0133, 1.9846])
+    weight = torch.tensor([1.0, 1.0, 0.76, 1.0])
+    # weight = torch.tensor([1.0, 0.0, 0.76, 0.0])
+    # weight = torch.tensor([1.0, 1.0, 1.0, 1.0])
+
+
     args = parser.parse_args()
     current_path = Path.cwd()
     train_path = current_path / 'datasets'/ version / trainGroundTruth
@@ -187,13 +193,17 @@ if __name__ == "__main__":
     test_path = current_path / 'datasets'/ version / testGroundTruth
     
 
-    embedding_dir = current_path / 'data' / 'prot_embeddings'
-    patience = 6  # Early stopping patience
+    embedding_dir = current_path / 'data' / 'protein_embeddings'
+    patience = 5  # Early stopping patience
     checkpoint_path = "best_model.pt"
-    run_name = f"domain_boundary_lr{args.learning}_bs{args.batch}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    run_name = f"domain_boundary_"+str(weight)
     log_dir = os.path.join("runs", run_name)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+    
     train_df = pd.read_csv(train_path)
     train_dataset = DomainBoundaryDataset(train_df, embedding_dir=embedding_dir)
     val_df = pd.read_csv(val_path)
@@ -213,7 +223,7 @@ if __name__ == "__main__":
     val_loader = DataLoader(val_dataset, batch_size=args.batch, collate_fn=collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=args.batch, collate_fn=collate_fn)
 
-    model = DomainBoundaryCNN().to(device)
+    # model = DomainBoundaryCNN().to(device)
     model = DomainBoundaryLinear().to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning)
@@ -224,8 +234,8 @@ if __name__ == "__main__":
     epochs_without_improvement = 0
 
     for epoch in range(1, args.epoch + 1):
-        train_loss = train(model, train_loader, optimizer, device)
-        val_loss = evaluate(model, val_loader, device)
+        train_loss = train(model, train_loader, optimizer, device, weight)
+        val_loss = evaluate(model, val_loader, device, weight)
 
         # Log to TensorBoard
         writer.add_scalar("Loss/train", train_loss, epoch)
@@ -257,5 +267,5 @@ if __name__ == "__main__":
     model.load_state_dict(torch.load(checkpoint_path))
     #TODO: change to relative path
 
-    output_json = current_path / 'data' / f'test_predictions_{run_name}.json'
+    output_json = current_path / 'data' / f'weighted_predictions_{run_name}.json'
     predict_and_save(model, test_loader, device, output_json)
