@@ -29,6 +29,7 @@ def get_segments(label_array, no_label):
 def compute_delta(minov, maxov, len_s1, len_s2):
     return min(
         (maxov - minov),
+        minov,
         int(0.5 * len_s1),
         int(0.5 * len_s2)
     )
@@ -85,4 +86,4 @@ def segment_overlap_score(y_true_labels: List[np.ndarray], y_pred_labels: List[n
             total_score += score
             total_length += length
 
-    return (total_score / total_length) * 100 if total_length > 0 else 0.0
+    return (total_score / total_length) if total_length > 0 else 0.0

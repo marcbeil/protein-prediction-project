@@ -62,7 +62,7 @@ def bootstrap_confidence_interval(
         }
 
     for _ in tqdm(range(num_bootstrap_samples), desc="Bootstrapping Progress"):
-        # Resample proteins with replacement (the core of bootstrapping)
+        # sklearn.utils resampling
         resampled_indices = [random.randrange(n_proteins) for _ in range(n_proteins)]
         resampled_data = [protein_data[i] for i in resampled_indices]
 
@@ -77,13 +77,14 @@ def bootstrap_confidence_interval(
         bootstrap_scores.append(score)
 
     # Calculate confidence interval using the percentile method
+    # scipy stats.t.interval
     lower_percentile = 100 * (alpha / 2)
     upper_percentile = 100 * (1 - alpha / 2)
     ci_lower = np.percentile(bootstrap_scores, lower_percentile)
     ci_upper = np.percentile(bootstrap_scores, upper_percentile)
-
+    mean = np.mean(bootstrap_scores)
     return {
-        f'mean': original_score,
+        f'mean': mean,
         f'ci_lower': ci_lower,
         f'ci_upper': ci_upper,
         f"alpha": alpha,

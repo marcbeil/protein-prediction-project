@@ -1,0 +1,154 @@
+{
+  "baseline_C": {
+    "accuracy": {
+      "mean": 0.3316539795007366,
+      "ci_lower": 0.3120246398071368,
+      "ci_upper": 0.3502452366131276,
+      "alpha": 0.05
+    },
+    "f1_score": {
+      "mean": 0.16519961463249497,
+      "ci_lower": 0.1484108955119499,
+      "ci_upper": 0.1817028859085669,
+      "alpha": 0.05
+    },
+    "jaccard_score": {
+      "mean": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0,
+      "alpha": 0.05
+    },
+    "recall_score": {
+      "mean": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0,
+      "alpha": 0.05
+    },
+    "precision_score": {
+      "mean": NaN,
+      "ci_lower": NaN,
+      "ci_upper": NaN,
+      "alpha": 0.05
+    },
+    "segment_overlap_score": {
+      "mean": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0,
+      "alpha": 0.05
+    }
+  },
+  "baseline_A": {
+    "accuracy": {
+      "mean": 0.3316539795007366,
+      "ci_lower": 0.3120246398071368,
+      "ci_upper": 0.3502452366131276,
+      "alpha": 0.05
+    },
+    "f1_score": {
+      "mean": 0.16519961463249497,
+      "ci_lower": 0.1484108955119499,
+      "ci_upper": 0.1817028859085669,
+      "alpha": 0.05
+    },
+    "jaccard_score": {
+      "mean": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0,
+      "alpha": 0.05
+    },
+    "recall_score": {
+      "mean": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0,
+      "alpha": 0.05
+    },
+    "precision_score": {
+      "mean": NaN,
+      "ci_lower": NaN,
+      "ci_upper": NaN,
+      "alpha": 0.05
+    },
+    "segment_overlap_score": {
+      "mean": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0,
+      "alpha": 0.05
+    }
+  },
+  "baseline_T": {
+    "accuracy": {
+      "mean": 0.3316539795007366,
+      "ci_lower": 0.3120246398071368,
+      "ci_upper": 0.3502452366131276,
+      "alpha": 0.05
+    },
+    "f1_score": {
+      "mean": 0.16519961463249497,
+      "ci_lower": 0.1484108955119499,
+      "ci_upper": 0.1817028859085669,
+      "alpha": 0.05
+    },
+    "jaccard_score": {
+      "mean": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0,
+      "alpha": 0.05
+    },
+    "recall_score": {
+      "mean": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0,
+      "alpha": 0.05
+    },
+    "precision_score": {
+      "mean": NaN,
+      "ci_lower": NaN,
+      "ci_upper": NaN,
+      "alpha": 0.05
+    },
+    "segment_overlap_score": {
+      "mean": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0,
+      "alpha": 0.05
+    }
+  },
+  "baseline_H": {
+    "accuracy": {
+      "mean": 0.3316539795007366,
+      "ci_lower": 0.3120246398071368,
+      "ci_upper": 0.3502452366131276,
+      "alpha": 0.05
+    },
+    "f1_score": {
+      "mean": 0.16519961463249497,
+      "ci_lower": 0.1484108955119499,
+      "ci_upper": 0.1817028859085669,
+      "alpha": 0.05
+    },
+    "jaccard_score": {
+      "mean": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0,
+      "alpha": 0.05
+    },
+    "recall_score": {
+      "mean": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0,
+      "alpha": 0.05
+    },
+    "precision_score": {
+      "mean": NaN,
+      "ci_lower": NaN,
+      "ci_upper": NaN,
+      "alpha": 0.05
+    },
+    "segment_overlap_score": {
+      "mean": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0,
+      "alpha": 0.05
+    }
+  }
+}

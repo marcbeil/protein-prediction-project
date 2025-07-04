@@ -191,3 +191,4 @@ data/domains-and-seqs.csv
 
 data/embeddings
 **/visualization_results/
+/output/protenn2/v5/protein_chain_vizualization/

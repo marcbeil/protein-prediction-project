@@ -1,3 +1,6 @@
+from sklearn.preprocessing import LabelEncoder
+
+
 def parse_cath(cath_string):
     """
     Parses a CATH string (e.g., "3.30.559.10") into its components.
@@ -102,47 +105,47 @@ def get_base_cath_color(cath_label_string):
 def visualize_prediction_sample_only_true(
         y_true_labels: np.ndarray,
         y_pred_confidences: np.ndarray,
-        label_encoder,
-        post_process_func,
-        post_process_func_args: dict,
+        y_pred_labels_post: np.ndarray,
+        label_encoder: LabelEncoder,
         protein_chain_id: str
 ):
     """
     Visualizes the ground truth, raw prediction (confidences for true labels only),
     and post-processed output for one protein sample.
-    """
-    # --- Map IDs to string labels ---
-    id_to_label = {i: label for i, label in enumerate(label_encoder.classes_)}
-    true_labels_str = [id_to_label[int(x)] for x in y_true_labels]
 
-    # --- Predicted graph: confidences for true labels only ---
-    true_label_ids = y_true_labels.astype(int)
-    true_label_confidences = y_pred_confidences[
-        np.arange(len(y_true_labels)), true_label_ids
-    ]
-    # RGBA for predicted: use true-label color + confidence as alpha
-    # (clipped to [0.1, 1.0] for visibility)
+    All labels are strings of the form 'C.A.T.H', e.g. '2.10.20.932'.
+    """
+    # --- Convert string labels to confidence values using label encoder ---
+    label_to_index = {label: i for i, label in enumerate(label_encoder.classes_)}
+    true_labels_str = y_true_labels
+    true_label_confidences = np.array([
+        y_pred_confidences[i, label_to_index[label]]
+        for i, label in enumerate(y_true_labels)
+    ])
 
     # --- Post-processed prediction ---
-    y_post_processed = post_process_func(y_pred_confidences, **post_process_func_args)
-    post_labels_str = [id_to_label[int(x)] for x in y_post_processed]
+    post_labels_str = y_pred_labels_post
 
     # --- Unique labels and colors ---
-    all_labels = sorted(set(true_labels_str + post_labels_str + ["NO_DOMAIN_REGION"]))
-    label_to_color = {label: get_base_cath_color(label) for label in all_labels}
-
+    all_labels = sorted(
+        set(["NO_DOMAIN_REGION"] + list(true_labels_str)),
+        key=lambda label: (0, "") if label == "NO_DOMAIN_REGION" else (1, label)
+    )
+    palette_hex = ["#FFFFFF", "#0C82D9", "#C43F7B"]
+    palette_rgb = [mcolors.to_rgb(c) for c in palette_hex]
+    label_to_color = {label: palette_rgb[i] for i, label in enumerate(all_labels)}
     # --- RGBA arrays ---
     true_rgba = [list(label_to_color[label]) + [1.0] for label in true_labels_str]
     pred_rgba = [
         list(label_to_color[label]) + [np.clip(conf, 0.1, 1.0)]
         for label, conf in zip(true_labels_str, true_label_confidences)
     ]
-    allowed_labels = set(true_labels_str)
+    allowed_labels = set([label for label in true_labels_str if label != "NO_DOMAIN_REGION"])
     post_rgba = [
-        # if the post label was seen in the true labels, draw it; otherwise make it fully transparent
         list(label_to_color[label]) + [1.0] if label in allowed_labels else [0, 0, 0, 0]
         for label in post_labels_str
     ]
+
     # --- Plotting ---
     fig, (ax1, ax2, ax3) = plt.subplots(
         3, 1, figsize=(10, 4), sharex=True, constrained_layout=True
@@ -162,14 +165,11 @@ def visualize_prediction_sample_only_true(
     ax3.set_yticks([])
     ax3.set_xlabel("Residue Index")
 
-
-
     # --- Legend: only labels both in true and post-processed outputs ---
     legend_handles = [
         mpatches.Patch(color=label_to_color[label], label=label)
-        for label in sorted(allowed_labels & set(post_labels_str))
+        for label in sorted(allowed_labels)
     ]
-    print(legend_handles)
     fig.legend(
         handles=legend_handles,
         loc='lower center',
@@ -180,3 +180,77 @@ def visualize_prediction_sample_only_true(
 
     return fig
 
+
+def visualize_prediction_sample_comparison(
+        y_true_labels: np.ndarray,
+        y_pred_labels_two_tier: np.ndarray,
+        y_pred_labels_post: np.ndarray,
+        label_encoder: LabelEncoder,
+        protein_chain_id: str
+):
+    """
+    Visualizes the ground truth, raw prediction (confidences for true labels only),
+    and post-processed output for one protein sample.
+
+    All labels are strings of the form 'C.A.T.H', e.g. '2.10.20.932'.
+    """
+    # --- Convert string labels to confidence values using label encoder ---
+    label_to_index = {label: i for i, label in enumerate(label_encoder.classes_)}
+    true_labels_str = y_true_labels
+
+    # --- Post-processed prediction ---
+    pred_labels_all_in_one = y_pred_labels_post
+
+    pred_labels_two_tier = y_pred_labels_two_tier
+    # --- Unique labels and colors ---
+    all_labels = sorted(
+        set(["NO_DOMAIN_REGION"] + list(true_labels_str)),
+        key=lambda label: (0, "") if label == "NO_DOMAIN_REGION" else (1, label)
+    )
+    palette_hex = ["#FFFFFF", "#0C82D9", "#C43F7B"]
+    palette_rgb = [mcolors.to_rgb(c) for c in palette_hex]
+    label_to_color = {label: palette_rgb[i] for i, label in enumerate(all_labels)}
+    # --- RGBA arrays ---
+    true_rgba = [list(label_to_color[label]) + [1.0] for label in true_labels_str]
+    allowed_labels = set([label for label in true_labels_str if label != "NO_DOMAIN_REGION"])
+
+    two_tier_rgba = [
+        list(label_to_color[label]) + [1.0] if label in allowed_labels else [0, 0, 0, 0]
+        for label in pred_labels_two_tier]
+
+    all_in_one_rgba = [list(label_to_color[label]) + [1.0] if label in allowed_labels else [0, 0, 0, 0]
+                       for label in pred_labels_all_in_one]
+
+    # --- Plotting ---
+    fig, (ax1, ax2, ax3) = plt.subplots(
+        3, 1, figsize=(10, 4), sharex=True, constrained_layout=True
+    )
+    fig.suptitle(f"Protein Chain {protein_chain_id}", fontsize=14)
+
+    ax1.imshow([true_rgba], aspect='auto')
+    ax1.set_title("Ground Truth", loc='left')
+    ax1.set_yticks([])
+
+    ax2.imshow([two_tier_rgba], aspect='auto')
+    ax2.set_title("two-tier", loc='left')
+    ax2.set_yticks([])
+
+    ax3.imshow([all_in_one_rgba], aspect='auto')
+    ax3.set_title("All-in-one post-processed", loc='left')
+    ax3.set_yticks([])
+    ax3.set_xlabel("Residue Index")
+
+    # --- Legend: only labels both in true and post-processed outputs ---
+    legend_handles = [
+        mpatches.Patch(color=label_to_color[label], label=label)
+        for label in sorted(allowed_labels)
+    ]
+    fig.legend(
+        handles=legend_handles,
+        loc='lower center',
+        ncol=min(6, len(legend_handles)),
+        bbox_to_anchor=(0.5, -0.1),
+        frameon=False
+    )
+
+    return fig

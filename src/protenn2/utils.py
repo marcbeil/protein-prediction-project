@@ -141,7 +141,7 @@ def _coalesce_contiguous_regions(thresholded_confidences: np.ndarray) -> List[Tu
             # An 'end' at index `j` in `diff` means the region ends *before* `j` in `padded_column`
             # so the last residue is at `j-1-1 = j-2` in original column.
             # Python slicing typically uses exclusive end, so end index is `j-1`.
-            contiguous_regions.append((class_idx, start_padded - 1, end_padded - 1))
+            contiguous_regions.append((class_idx, start_padded, end_padded - 1))
 
     return contiguous_regions
 
@@ -208,7 +208,6 @@ def call_domains(
 
     # 2. Coalesce contiguous regions for each class
     contiguous_regions = _coalesce_contiguous_regions(thresholded_confidences)
-
     # 3. Filter out short regions
     long_contiguous_regions = _filter_region_length(contiguous_regions, region_min_length)
 
