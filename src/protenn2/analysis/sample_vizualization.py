@@ -107,7 +107,8 @@ def visualize_prediction_sample_only_true(
         y_pred_confidences: np.ndarray,
         y_pred_labels_post: np.ndarray,
         label_encoder: LabelEncoder,
-        protein_chain_id: str
+        protein_chain_id: str,
+        palette_hex=["#FFFFFF", "#0C82D9", "#C43F7B"]
 ):
     """
     Visualizes the ground truth, raw prediction (confidences for true labels only),
@@ -131,7 +132,6 @@ def visualize_prediction_sample_only_true(
         set(["NO_DOMAIN_REGION"] + list(true_labels_str)),
         key=lambda label: (0, "") if label == "NO_DOMAIN_REGION" else (1, label)
     )
-    palette_hex = ["#FFFFFF", "#0C82D9", "#C43F7B"]
     palette_rgb = [mcolors.to_rgb(c) for c in palette_hex]
     label_to_color = {label: palette_rgb[i] for i, label in enumerate(all_labels)}
     # --- RGBA arrays ---
@@ -153,11 +153,11 @@ def visualize_prediction_sample_only_true(
     fig.suptitle(f"Protein Chain {protein_chain_id}", fontsize=14)
 
     ax1.imshow([true_rgba], aspect='auto')
-    ax1.set_title("Ground Truth", loc='left')
+    ax1.set_title("Ground truth", loc='left')
     ax1.set_yticks([])
 
     ax2.imshow([pred_rgba], aspect='auto')
-    ax2.set_title("Predicted (True-label confidences)", loc='left')
+    ax2.set_title("Raw prediction", loc='left')
     ax2.set_yticks([])
 
     ax3.imshow([post_rgba], aspect='auto')
@@ -186,7 +186,8 @@ def visualize_prediction_sample_comparison(
         y_pred_labels_two_tier: np.ndarray,
         y_pred_labels_post: np.ndarray,
         label_encoder: LabelEncoder,
-        protein_chain_id: str
+        protein_chain_id: str,
+        palette_hex=["#FFFFFF", "#0C82D9", "#C43F7B"]
 ):
     """
     Visualizes the ground truth, raw prediction (confidences for true labels only),
@@ -207,7 +208,6 @@ def visualize_prediction_sample_comparison(
         set(["NO_DOMAIN_REGION"] + list(true_labels_str)),
         key=lambda label: (0, "") if label == "NO_DOMAIN_REGION" else (1, label)
     )
-    palette_hex = ["#FFFFFF", "#0C82D9", "#C43F7B"]
     palette_rgb = [mcolors.to_rgb(c) for c in palette_hex]
     label_to_color = {label: palette_rgb[i] for i, label in enumerate(all_labels)}
     # --- RGBA arrays ---
@@ -228,11 +228,11 @@ def visualize_prediction_sample_comparison(
     fig.suptitle(f"Protein Chain {protein_chain_id}", fontsize=14)
 
     ax1.imshow([true_rgba], aspect='auto')
-    ax1.set_title("Ground Truth", loc='left')
+    ax1.set_title("Ground truth", loc='left')
     ax1.set_yticks([])
 
     ax2.imshow([two_tier_rgba], aspect='auto')
-    ax2.set_title("two-tier", loc='left')
+    ax2.set_title("Two-tier", loc='left')
     ax2.set_yticks([])
 
     ax3.imshow([all_in_one_rgba], aspect='auto')

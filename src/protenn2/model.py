@@ -1,3 +1,4 @@
+import torch
 from torch import nn
 
 
@@ -14,3 +15,4 @@ class CathPredEnn2(nn.Module):
         x = x.permute(0, 2, 1)
         x = self.fc(x)
         return x
+

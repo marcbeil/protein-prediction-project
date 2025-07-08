@@ -20,7 +20,7 @@ class CATHHierarchyMapper:
 
         # --- Configuration ---
         self.special_labels = {"PADDING_REGION", "NO_DOMAIN_REGION"}
-        self.hierarchy_levels = {'C': 1, 'A': 2, 'T': 3, 'H': 4}
+        self.hierarchy_levels = {'D': 0, 'C': 1, 'A': 2, 'T': 3, 'H': 4}
 
         # --- Build Mappings ---
         self.target_maps = {}
@@ -28,7 +28,35 @@ class CATHHierarchyMapper:
         self.mapping_matrices = {}
 
         for level_name, depth in self.hierarchy_levels.items():
-            # For the H-level, the mapping is an identity transformation
+            if level_name == 'D':
+                # 0 = DOMAIN, 1 = NO_DOMAIN_REGION, 2 = PADDING_REGION
+                domain_label = 'DOMAIN'
+                target_vocab = {
+                    domain_label: 0,
+                    'NO_DOMAIN_REGION': 1,
+                    'PADDING_REGION': 2,
+                }
+                self.target_class_count['D'] = len(target_vocab)
+
+                # map every H-level index into one of the three buckets
+                h_to_target_map = {}
+                for idx, lbl in enumerate(h_level_classes):
+                    if lbl == 'PADDING_REGION':
+                        h_to_target_map[idx] = target_vocab['PADDING_REGION']
+                    elif lbl == 'NO_DOMAIN_REGION':
+                        h_to_target_map[idx] = target_vocab['NO_DOMAIN_REGION']
+                    else:
+                        h_to_target_map[idx] = target_vocab[domain_label]
+
+                    self.target_maps['D'] = h_to_target_map
+                    # build a (num_h_classes x 3) one-hot matrix
+                    mapping_matrix = np.zeros((num_h_classes, len(target_vocab)), dtype=np.float32)
+
+                for h_idx, t_idx in h_to_target_map.items():
+                    mapping_matrix[h_idx, t_idx] = 1.0
+                self.mapping_matrices['D'] = mapping_matrix
+                continue
+
             if level_name == 'H':
                 self.target_maps['H'] = {i: i for i in range(num_h_classes)}
                 self.target_class_count['H'] = num_h_classes

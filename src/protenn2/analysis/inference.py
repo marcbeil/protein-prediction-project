@@ -74,8 +74,8 @@ def run_inference_dummy(
         dummy_classifier,
         dataloader,
         padding_encoded_id: int,
-        majority_label: int,
-        num_classes: int
+        num_classes: int,
+        dummy_classifier_kwargs: dict = {},
 ) -> Tuple[List[np.ndarray], List[np.ndarray]]:
     """
     Run dummy inference and return trimmed ground truth and dummy probabilities.
@@ -92,10 +92,11 @@ def run_inference_dummy(
     """
     y_true_list = []
     probabilities_list = []
+    protein_chain_id_list = []
 
     print(f"Running dummy inference on {len(dataloader)} proteins...")
 
-    for i, (_, y_true_batch, _) in enumerate(tqdm(dataloader, desc="Dummy Inference Progress")):
+    for i, (_, y_true_batch, protein_chain_id) in enumerate(tqdm(dataloader, desc="Dummy Inference Progress")):
         # Get full true labels
         y_true_full = y_true_batch[0].cpu().numpy()
 
@@ -105,7 +106,7 @@ def run_inference_dummy(
         y_true_trimmed = y_true_full[:seq_len]
 
         # Get dummy predictions from the classifier
-        y_pred_dummy = dummy_classifier(y_true_trimmed, majority_label)
+        y_pred_dummy = dummy_classifier(y_true_trimmed, **dummy_classifier_kwargs)
 
         # Convert to one-hot encoded probability-like vectors
 
@@ -113,11 +114,36 @@ def run_inference_dummy(
 
         y_true_list.append(y_true_trimmed)
         probabilities_list.append(probs_dummy)
+        protein_chain_id_list.append(protein_chain_id)
 
     print(f"Dummy inference complete. Processed {len(y_true_list)} proteins.")
 
-    return y_true_list, probabilities_list
+    return y_true_list, probabilities_list, protein_chain_id_list
 
 
 def dummy_majority_classifier_per_protein(y_true_trimmed: np.ndarray, majority_label) -> np.ndarray:
     return np.full_like(y_true_trimmed, majority_label)
+
+
+def dummy_stratified_classifier_per_protein(
+        y_true_trimmed: np.ndarray,
+        distribution: np.ndarray
+) -> np.ndarray:
+    # Predicts classes according to the provided global distribution
+    class_ids = np.arange(distribution.shape[0])
+    return np.random.choice(class_ids, size=y_true_trimmed.shape[0], p=distribution)
+
+
+def dummy_uniform_classifier_per_protein(
+        y_true_trimmed: np.ndarray,
+        num_classes: int
+) -> np.ndarray:
+    return np.random.randint(0, num_classes, size=y_true_trimmed.shape[0])
+
+
+def dummy_constant_classifier_per_protein(
+        y_true_trimmed: np.ndarray,
+        constant_label: int
+) -> np.ndarray:
+    # always predicts the same constant_label
+    return np.full_like(y_true_trimmed, fill_value=constant_label)

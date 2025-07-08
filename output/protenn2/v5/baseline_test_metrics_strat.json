@@ -1,0 +1,82 @@
+{
+  "baseline_stratified_C": {
+    "accuracy": {
+      "mean": 0.2879258455708221,
+      "ci_lower": 0.28299163836986285,
+      "ci_upper": 0.29240121193282276,
+      "alpha": 0.05
+    },
+    "jaccard_score": {
+      "mean": 0.15821616818278106,
+      "ci_lower": 0.1508438475170919,
+      "ci_upper": 0.1658569006065693,
+      "alpha": 0.05
+    },
+    "segment_overlap_score": {
+      "mean": 0.03139716197899321,
+      "ci_lower": 0.030371250969068526,
+      "ci_upper": 0.03248018859159994,
+      "alpha": 0.05
+    }
+  },
+  "baseline_stratified_A": {
+    "accuracy": {
+      "mean": 0.15542782607021857,
+      "ci_lower": 0.1498048262113331,
+      "ci_upper": 0.16063667901475076,
+      "alpha": 0.05
+    },
+    "jaccard_score": {
+      "mean": 0.03609921089018046,
+      "ci_lower": 0.03387514138976865,
+      "ci_upper": 0.03836186603341956,
+      "alpha": 0.05
+    },
+    "segment_overlap_score": {
+      "mean": 0.012586217849723962,
+      "ci_lower": 0.012105079299012047,
+      "ci_upper": 0.013090590848887827,
+      "alpha": 0.05
+    }
+  },
+  "baseline_stratified_T": {
+    "accuracy": {
+      "mean": 0.1167498469963567,
+      "ci_lower": 0.11020639305532826,
+      "ci_upper": 0.12269606777019788,
+      "alpha": 0.05
+    },
+    "jaccard_score": {
+      "mean": 0.00558985287271483,
+      "ci_lower": 0.004708887403468416,
+      "ci_upper": 0.006611620743280504,
+      "alpha": 0.05
+    },
+    "segment_overlap_score": {
+      "mean": 0.0030716787549741093,
+      "ci_lower": 0.0028296351135609263,
+      "ci_upper": 0.003331587360916652,
+      "alpha": 0.05
+    }
+  },
+  "baseline_stratified_H": {
+    "accuracy": {
+      "mean": 0.11033847375234725,
+      "ci_lower": 0.10362388457520949,
+      "ci_upper": 0.11648379493156698,
+      "alpha": 0.05
+    },
+    "jaccard_score": {
+      "mean": 0.00066979246419944,
+      "ci_lower": 0.0005717490227164822,
+      "ci_upper": 0.0007772693728665545,
+      "alpha": 0.05
+    },
+    "segment_overlap_score": {
+      "mean": 0.0009413120694108793,
+      "ci_lower": 0.0008251276245953621,
+      "ci_upper": 0.0010565761340606387,
+      "alpha": 0.05
+    }
+  }
+}

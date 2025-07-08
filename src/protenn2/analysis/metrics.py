@@ -94,6 +94,7 @@ def bootstrap_confidence_interval(
 def calculate_metrics(protein_data, num_classes, bootstrap_samples: int = 1000,
                       metrics_to_compute=("accuracy", "f1_score", "jaccard_score", "recall_score", "precision_score",
                                           "segment_overlap_score")):
+    print(metrics_to_compute)
     all_results = {}
     all_metrics = ("accuracy", "f1_score", "jaccard_score", "recall_score", "precision_score",
                    "segment_overlap_score")
@@ -113,7 +114,9 @@ def calculate_metrics(protein_data, num_classes, bootstrap_samples: int = 1000,
             metric_func=f1_score,
             num_bootstrap_samples=bootstrap_samples,
             # additional params for metric func
-            average='weighted'
+            average='weighted',
+            zero_division=0,
+            labels=range(num_classes - 2)
         )
         all_results["f1_score"] = f1_results_post
         print(f1_results_post)
@@ -140,7 +143,7 @@ def calculate_metrics(protein_data, num_classes, bootstrap_samples: int = 1000,
             metric_func=recall_score,
             num_bootstrap_samples=bootstrap_samples,
             average="weighted",
-            zero_division=np.nan,
+            zero_division=0,
             labels=range(num_classes - 2)
         )
         all_results["recall_score"] = recall_results
@@ -153,7 +156,7 @@ def calculate_metrics(protein_data, num_classes, bootstrap_samples: int = 1000,
             metric_func=precision_score,
             num_bootstrap_samples=bootstrap_samples,
             average="weighted",
-            zero_division=np.nan,
+            zero_division=0,
             labels=range(num_classes - 2)
         )
         all_results["precision_score"] = precision_results
@@ -174,8 +177,8 @@ def calculate_metrics_for_cath_levels(y_true_labels_list, y_pred_confidences_lis
                                       metrics_to_compute=("accuracy", "f1_score", "jaccard_score", "recall_score",
                                                           "precision_score",
                                                           "segment_overlap_score"),
-                                      post_process_func=None, post_process_kwargs=None
-
+                                      post_process_func=None, post_process_kwargs=None,
+                                      name="raw"
                                       ):
     all_results = {}
 
@@ -188,9 +191,9 @@ def calculate_metrics_for_cath_levels(y_true_labels_list, y_pred_confidences_lis
         y_pred_labels_list_level = [np.argmax(protein, axis=-1) for protein in y_pred_confidences_list_level]
         per_protein_data_level = list(zip(y_true_labels_list_level, y_pred_labels_list_level))
         num_classes = mapper.get_class_count(level)
-        all_results[f"raw_{level}"] = calculate_metrics(per_protein_data_level, num_classes=num_classes,
-                                                        bootstrap_samples=bootstrap_samples,
-                                                        metrics_to_compute=metrics_to_compute, )
+        all_results[f"{name}_{level}"] = calculate_metrics(per_protein_data_level, num_classes=num_classes,
+                                                           bootstrap_samples=bootstrap_samples,
+                                                           metrics_to_compute=metrics_to_compute, )
         if post_process_func is not None:
             if post_process_kwargs is None:
                 post_process_kwargs = {"no_domain_label_id": num_classes - 2}
